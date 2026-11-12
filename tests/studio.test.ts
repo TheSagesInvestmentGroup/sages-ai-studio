@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { timeScenes, sceneCount, builtinTreatments, builtinPlan, builtinEdit, estimate, policyCheck, subjectOf } from '../lib/director';
 import { parseResume, careerPlan } from '../lib/career';
-import { PLANS, sceneCost } from '../lib/plans';
+import { PLANS, sceneCost, COST, PROVIDER_COST_PER_SECOND_USD } from '../lib/plans';
 
 const brief = { prompt: 'Create a video of a futuristic city with flying cars.', style: 'Sci-Fi', duration: 30, aspect: '16:9' };
 
@@ -10,7 +10,7 @@ test('scene timing adds up and respects 2-10 second clip limits', () => {
   for (const d of [15, 30, 60, 90, 180]) {
     const secs = timeScenes(d, sceneCount(d));
     assert.equal(secs.reduce((a, b) => a + b, 0), d, `total for ${d}`);
-    assert.ok(secs.every(s => s >= 2 && s <= 10), `limits for ${d}`);
+    assert.ok(secs.every(s => s >= 3 && s <= 10), `limits for ${d}`);
   }
 });
 
@@ -61,9 +61,9 @@ test('content rules', () => {
   assert.equal(policyCheck('deepfake of the president giving a speech').ok, false);
 });
 
-test('credit maths: a full allowance covers the monthly productions at a typical length', () => {
+test('credit maths: a fully used allowance costs no more than half the membership fee', () => {
   assert.equal(sceneCost(5, true), 22);
-  for (const p of PLANS.filter(p => p.id !== 'bio')) assert.ok(p.credits >= p.videos * 30 * 4, `${p.name} covers ${p.videos} thirty-second productions`);
+  for (const p of PLANS) assert.ok((p.credits / COST.videoPerSecond) * PROVIDER_COST_PER_SECOND_USD <= p.price * 0.5, `${p.name} keeps a margin`);
 });
 
 const RESUME = `Jordan Ellis

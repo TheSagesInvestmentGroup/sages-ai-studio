@@ -5,7 +5,7 @@ import { isDemo } from './config';
 import { spendCredits, addCredits, membership } from './auth';
 import { sceneCost } from './plans';
 import { Plan, Scene, scenePrompt, Brief } from './director';
-import { videoLive, videoSubmit, videoStatus, voiceLive, voiceRender } from './providers';
+import { videoLive, videoSubmit, videoStatus, voiceLive, voiceSubmit } from './providers';
 
 export async function briefOf(project: Row): Promise<Brief> {
   const cast = project.cast_ids?.length ? (await db.list('characters', { user_id: project.user_id })).filter(c => project.cast_ids.includes(c.id)).map(c => ({ name: c.name, look: [c.appearance, c.wardrobe].filter(Boolean).join(', '), voice: c.voice })) : [];
@@ -71,11 +71,21 @@ export async function poll(project: Row) {
         Object.assign(sc, { status: 'failed', error: st.error, job_id: null, cost: 0 }); dirty = true;
       }
     }
-    if (voiceLive() && sc.narration && !sc.voice_url && voiced < 2 && project.status !== 'concept' && project.status !== 'planned') {
-      voiced++;
-      const audio = await voiceRender(sc.narration);
-      const url = audio && (await saveRender(`${project.id}/${sc.id}-voice-${Date.now()}.mp3`, audio, 'audio/mpeg'));
-      if (url) { sc.voice_url = url; dirty = true; }
+    // Narration is its own task: submit once, then collect the audio when it is ready.
+    const vs = sc as any;
+    if (voiceLive() && sc.narration && !sc.voice_url && project.status !== 'concept' && project.status !== 'planned') {
+      if (vs.voice_job) {
+        const st = await videoStatus(vs.voice_job);
+        if (st.state === 'done' && st.url) {
+          let url = st.url;
+          try { const r = await fetch(st.url); if (r.ok) url = (await saveRender(`${project.id}/${sc.id}-voice-${Date.now()}.mp3`, await r.arrayBuffer(), 'audio/mpeg')) || st.url; } catch { /* keep provider URL */ }
+          sc.voice_url = url; vs.voice_job = null; dirty = true;
+        } else if (st.state === 'failed') { vs.voice_job = null; vs.voice_failed = true; dirty = true; }
+      } else if (!vs.voice_failed && voiced < 3) {
+        voiced++;
+        const r = await voiceSubmit(sc.narration);
+        if (r.id) { vs.voice_job = r.id; dirty = true; } else { vs.voice_failed = true; dirty = true; }
+      }
     }
   }
   if (!dirty) return project;

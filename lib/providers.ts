@@ -39,47 +39,40 @@ export async function llmText(system: string, user: string): Promise<string | nu
   return null;
 }
 
-// ---------- video (Runway API) ----------
-// The Runway API fronts several models; gen4.5 accepts 1280:720 or 720:1280 and
-// 2–10 second clips. Square output is produced by reframing in the player.
+// ---------- video and voice (Runway API) ----------
+// One Runway Dev account serves both. Request shapes follow Runway's OpenAPI
+// spec (read 12 Nov 2026): gemini_omni_flash_1.2 and kling_4 accept 1280:720 or
+// 720:1280 and clips from 3 seconds; square output is reframed in the player.
 export const videoLive = () => !!cfg.runwayKey;
+export const voiceLive = () => !!cfg.runwayKey;
 const RW = 'https://api.dev.runwayml.com';
 const rwHeaders = () => ({ Authorization: `Bearer ${cfg.runwayKey}`, 'X-Runway-Version': '2024-11-06', 'Content-Type': 'application/json' });
 
-export async function videoSubmit(prompt: string, aspect: string, seconds: number): Promise<{ id?: string; error?: string }> {
+async function rwSubmit(path: string, body: any): Promise<{ id?: string; error?: string }> {
   try {
-    const r = await fetchT(`${RW}/v1/text_to_video`, {
-      method: 'POST', headers: rwHeaders(),
-      body: JSON.stringify({ model: cfg.runwayModel, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(2, Math.min(10, Math.round(seconds))) }),
-    });
+    const r = await fetchT(`${RW}${path}`, { method: 'POST', headers: rwHeaders(), body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.id) return { error: j?.error || j?.message || `The video service refused the request (${r.status}).` };
+    if (!r.ok || !j.id) return { error: (typeof j?.error === 'string' && j.error) || j?.message || `The media service refused the request (${r.status}).` };
     return { id: j.id };
-  } catch { return { error: 'The video service did not respond.' }; }
+  } catch { return { error: 'The media service did not respond.' }; }
 }
 
+export const videoSubmit = (prompt: string, aspect: string, seconds: number) =>
+  rwSubmit('/v1/text_to_video', { model: cfg.runwayModel, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
+
+export const voiceSubmit = (text: string) =>
+  rwSubmit('/v1/text_to_speech', { model: cfg.runwayVoiceModel, promptText: text.slice(0, 2000), voice: { type: 'runway-preset', presetId: cfg.runwayVoice } });
+
+/** Status of any Runway task (video or voice). */
 export async function videoStatus(id: string): Promise<{ state: 'working' | 'done' | 'failed'; url?: string; error?: string }> {
   try {
     const r = await fetchT(`${RW}/v1/tasks/${encodeURIComponent(id)}`, { headers: rwHeaders() }, 12000);
     if (!r.ok) return { state: 'working' };
     const j = await r.json();
     if (j.status === 'SUCCEEDED' && j.output?.[0]) return { state: 'done', url: j.output[0] };
-    if (j.status === 'FAILED' || j.status === 'CANCELLED') return { state: 'failed', error: j.failure || 'The video service could not render this scene.' };
+    if (j.status === 'FAILED' || j.status === 'CANCELLED') return { state: 'failed', error: j.failure || 'The media service could not complete this scene.' };
     return { state: 'working' };
   } catch { return { state: 'working' }; }
-}
-
-// ---------- voice (ElevenLabs text to speech) ----------
-export const voiceLive = () => !!(cfg.elevenKey && cfg.elevenVoice);
-export async function voiceRender(text: string): Promise<Buffer | null> {
-  if (!voiceLive() || !text.trim()) return null;
-  try {
-    const r = await fetchT(`https://api.elevenlabs.io/v1/text-to-speech/${cfg.elevenVoice}`, {
-      method: 'POST', headers: { 'xi-api-key': cfg.elevenKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-      body: JSON.stringify({ text: text.slice(0, 2500), model_id: cfg.elevenModel }),
-    }, 20000);
-    return r.ok ? Buffer.from(await r.arrayBuffer()) : null;
-  } catch { return null; }
 }
 
 // ---------- email (Resend) ----------

@@ -14,10 +14,9 @@ export const cfg = {
   resendKey: env('RESEND_API_KEY'),
   emailFrom: env('EMAIL_FROM') || 'The Sages AI Studio <no-reply@example.com>',
   runwayKey: env('RUNWAY_API_KEY'),
-  runwayModel: env('RUNWAY_MODEL') || 'gen4.5',
-  elevenKey: env('ELEVENLABS_API_KEY'),
-  elevenVoice: env('ELEVENLABS_VOICE_ID'),
-  elevenModel: env('ELEVENLABS_MODEL') || 'eleven_multilingual_v2',
+  runwayModel: env('RUNWAY_MODEL') || 'gemini_omni_flash_1.2',
+  runwayVoiceModel: env('RUNWAY_VOICE_MODEL') || 'eleven_v3',
+  runwayVoice: env('RUNWAY_VOICE') || 'Maya',
 };
 
 /** Local demo mode: no Supabase project configured. Data lives in a local JSON file. */
@@ -37,7 +36,7 @@ export function providerStatus() {
   return [
     { area: 'Creative reasoning and scripts', provider: llmProviders().map(p => p.name).join(' → ') || 'Built-in director', live: llmProviders().length > 0, note: llmProviders().length ? 'Failover in the order shown' : 'Rule-based writer. Add DEEPSEEK_API_KEY for richer writing.' },
     { area: 'Video generation', provider: 'Runway API', live: !!cfg.runwayKey, note: cfg.runwayKey ? `Model ${cfg.runwayModel}` : 'Not connected. Members get storyboard animatics only.' },
-    { area: 'Voice narration', provider: 'ElevenLabs', live: !!(cfg.elevenKey && cfg.elevenVoice), note: cfg.elevenKey ? 'Text to speech' : 'Not connected. Previews use the browser voice.' },
+    { area: 'Voice narration', provider: 'ElevenLabs voices through the Runway API', live: !!cfg.runwayKey, note: cfg.runwayKey ? `Model ${cfg.runwayVoiceModel}, voice ${cfg.runwayVoice}` : 'Not connected. Previews use the browser voice.' },
     { area: 'Music and sound effects', provider: 'None', live: false, note: 'Direction is written per scene; members can upload licensed tracks.' },
     { area: 'Payments', provider: 'Stripe', live: !!cfg.stripeKey, note: cfg.stripeKey ? 'Subscriptions, portal, refunds' : 'Not connected.' },
     { area: 'Email', provider: 'Resend', live: !!cfg.resendKey, note: cfg.resendKey ? 'Support escalations' : 'Not connected. Escalations wait in the control center.' },

@@ -3,7 +3,8 @@
 ## To go live (owner decisions needed)
 - [ ] Create Supabase project and run `supabase/schema.sql`
 - [ ] Create Stripe product with five monthly prices; enable ACH; add webhook
-- [ ] Runway API key (video) and ElevenLabs key + voice (narration)
+- [x] Runway Dev account with credits (video and narration)
+- [ ] Runway API key pasted into Netlify
 - [ ] DeepSeek key for the Creative Director
 - [ ] GitHub repo + Netlify site + environment variables; domain
 - [ ] Calibrate credit prices against real provider invoices

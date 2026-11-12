@@ -192,7 +192,7 @@ export default function Workspace({ params }: { params: { id: string } }) {
           <div className="row between"><h3>Scene {editing.n} details</h3><span className="pill gold">Professional Studio</span></div>
           <div className="grid g2">
             <label className="field">Title<input value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} /></label>
-            <label className="field">Length in seconds (2 to 10)<input type="number" min={2} max={10} value={editing.seconds} onChange={e => setEditing({ ...editing, seconds: +e.target.value })} /></label>
+            <label className="field">Length in seconds (3 to 10)<input type="number" min={3} max={10} value={editing.seconds} onChange={e => setEditing({ ...editing, seconds: +e.target.value })} /></label>
           </div>
           <label className="field">What we see<textarea value={editing.visual} onChange={e => setEditing({ ...editing, visual: e.target.value })} /></label>
           <div className="grid g2">

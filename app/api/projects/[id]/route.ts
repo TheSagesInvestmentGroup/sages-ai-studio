@@ -50,7 +50,7 @@ export const PATCH = (req: Request, { params }: Ctx) => withUser(req, async (use
       const check = policyCheck(String(b.fields?.visual || '')); if (!check.ok) return fail(422, check.reason!);
       const before = JSON.stringify([sc.visual, sc.camera, sc.lighting, sc.seconds]);
       for (const k of ['title', 'visual', 'camera', 'lighting', 'narration', 'onscreen', 'sound', 'music'] as const) if (typeof b.fields?.[k] === 'string') (sc as any)[k] = clean(b.fields[k], 800);
-      if (Number.isFinite(+b.fields?.seconds)) sc.seconds = Math.max(2, Math.min(10, Math.round(+b.fields.seconds)));
+      if (Number.isFinite(+b.fields?.seconds)) sc.seconds = Math.max(3, Math.min(10, Math.round(+b.fields.seconds)));
       if (before !== JSON.stringify([sc.visual, sc.camera, sc.lighting, sc.seconds]) && sc.clip_url) sc.status = 'stale';
       if (typeof b.fields?.narration === 'string') sc.voice_url = null;
       sc.approved = false;

@@ -25,8 +25,8 @@ Imagine (prompt, style, length, format) → Enhance (three treatments; combine, 
 | Area | Integrated | Notes |
 |---|---|---|
 | Writing and reasoning | Any OpenAI-compatible API: DeepSeek, OpenAI, Grok, Qwen, Kimi, GLM, Llama hosts | Tried in order; built-in writer is the last fallback |
-| Video | Runway API `text_to_video` (`gen4.5`; the same API also serves `seedance2` and `gemini_omni_flash` via `RUNWAY_MODEL`) | 2–10 s clips, 16:9 or 9:16 |
-| Voice | ElevenLabs text to speech | One studio voice per deployment |
+| Video | Runway API `text_to_video`, default `gemini_omni_flash_1.2` ($0.07/s at 720p); `kling_4`, `gen4.5` and others via `RUNWAY_MODEL` | 3–10 s clips, 16:9 or 9:16 |
+| Voice | Runway API `text_to_speech` (`eleven_v3`, preset voice) | One studio voice per deployment; same account and credits as video |
 | Not integrated | Sora 2 | OpenAI's documentation states the Videos API was shut down on 24 September 2026 |
 | Not integrated | Veo 3.1 preview | Google's documentation states the preview models were shut down on 22 October 2026 |
 | Not integrated | Kling, Higgsfield, Luma, Midjourney, Flux, Suno | No adapter yet. Midjourney and Suno have no official public API that we could verify |
@@ -34,7 +34,7 @@ Imagine (prompt, style, length, format) → Enhance (three treatments; combine, 
 Adding a video vendor means writing two functions, `videoSubmit` and `videoStatus`, in `lib/providers.ts`.
 
 ## Credits
-Video costs 4 credits per second, narration 2 per scene. Monthly allowances: 400 / 1,000 / 2,200 / 4,800 / 10,000. **These are starting values and have not been checked against provider invoices.** Before launch, render a few productions, divide the Runway and ElevenLabs cost by credits used, and adjust `COST` and the allowances in `lib/plans.ts` so each tier keeps a margin.
+Video costs 4 credits per second, narration 2 per scene. Monthly allowances: 260 / 640 / 1,300 / 2,600 / 5,200, which is 65 / 160 / 325 / 650 / 1,300 seconds of video. They are set from Runway's published price for `gemini_omni_flash_1.2` at 720p ($0.07 per second) so a fully used allowance costs about 45% of the fee, before Stripe fees. A dearer model (`kling_4` is about $0.16 per second) needs smaller allowances or higher prices. Confirm against the first real Runway usage report.
 
 ## Security
 Sessions in HTTP-only cookies · origin check on every state-changing request · per-IP rate limits · server-side ownership check on every id · row-level security · atomic credit spend in Postgres · private storage with short-lived signed links · upload type and size allow-list · Stripe handles all card and bank data · consent records for likeness · audit log · security headers (HSTS, nosniff, frame deny, permissions policy) · content rules before generation · AI-generated label on every preview.
@@ -50,10 +50,10 @@ Sessions in HTTP-only cookies · origin check on every state-changing request ·
 8. **Direct posting to social networks** is by share link. Publishing through Postiz is a small follow-on.
 9. **Team workspaces, reviewer comments, marketplace, credit packs, MFA and social sign-in** are not built.
 10. **Autonomous maintenance agents** are not part of this app. Nothing here updates itself.
-11. The Supabase, Stripe, Runway, ElevenLabs and Resend code paths have been type-checked and built but **not exercised against live accounts**.
+11. The Supabase, Stripe, Runway and Resend code paths have been type-checked and built but **not exercised against live accounts**.
 
 ## Roadmap
-- **Phase 1 (this delivery):** accounts, five tiers, credits, treatments, scene planning, conversational editing, versions, characters, assets, Bio & Résumé Studio with portfolio page, share links, support assistant, control center, Runway and ElevenLabs adapters.
+- **Phase 1 (this delivery):** accounts, five tiers, credits, treatments, scene planning, conversational editing, versions, characters, assets, Bio & Résumé Studio with portfolio page, share links, support assistant, control center, Runway video and voice adapters.
 - **Phase 2:** FFmpeg render worker for one mastered MP4 with narration and music; image-to-video from uploaded references; second video vendor for failover; Postiz publishing.
 - **Phase 3:** music and sound generation; avatar and consented voice provider; subtitles export (SRT); localisation; team seats and comments.
 - **Phase 4:** credit packs, template marketplace, API access.

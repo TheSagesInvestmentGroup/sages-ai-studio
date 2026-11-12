@@ -41,15 +41,15 @@ export function subjectOf(prompt: string) {
 
 export function sceneCount(duration: number) { return duration <= 15 ? 3 : duration <= 30 ? 5 : duration <= 60 ? 8 : duration <= 90 ? 10 : duration <= 140 ? 14 : 18; }
 
-/** Split a running time into scene lengths between 2 and 10 seconds (provider clip limits). */
+/** Split a running time into scene lengths between 3 and 10 seconds (provider clip limits). */
 export function timeScenes(duration: number, count: number): number[] {
   const weights = Array.from({ length: count }, (_, i) => (i === 0 ? 0.8 : i === count - 1 ? 1.1 : i === count - 2 ? 1.25 : 1));
   const total = weights.reduce((a, b) => a + b, 0);
-  const secs = weights.map(w => Math.max(2, Math.min(10, Math.round((duration * w) / total))));
+  const secs = weights.map(w => Math.max(3, Math.min(10, Math.round((duration * w) / total))));
   let diff = Math.min(duration, count * 10) - secs.reduce((a, b) => a + b, 0), i = 0, guard = 0;
   while (diff !== 0 && guard++ < 500) {
     const k = i++ % count, step = diff > 0 ? 1 : -1;
-    if (secs[k] + step >= 2 && secs[k] + step <= 10) { secs[k] += step; diff -= step; }
+    if (secs[k] + step >= 3 && secs[k] + step <= 10) { secs[k] += step; diff -= step; }
   }
   return secs;
 }
@@ -189,7 +189,7 @@ export function builtinEdit(plan: Plan, instruction: string, sceneId?: string | 
   let reply = '', m: RegExpMatchArray | null;
 
   if ((m = t.match(/(\d+)[- ]?(second|sec|s)\b/)) && /turn|make|cut|shorten|convert|version/.test(t)) {
-    const d = Math.max(6, Math.min(180, +m[1])), count = sceneCount(d), keep = p.scenes.length > count ? [...p.scenes.slice(0, count - 1), last] : p.scenes;
+    const d = Math.max(9, Math.min(180, +m[1])), count = sceneCount(d), keep = p.scenes.length > count ? [...p.scenes.slice(0, count - 1), last] : p.scenes;
     const secs = timeScenes(d, keep.length);
     p.scenes = keep.map((s, i) => ({ ...s, n: i + 1, seconds: secs[i] }));
     reply = `Recut to ${d} seconds across ${p.scenes.length} scenes. Scenes whose length changed need a new render; the rest are untouched.`;
@@ -202,7 +202,7 @@ export function builtinEdit(plan: Plan, instruction: string, sceneId?: string | 
     last.visual = `${trimDot(last.visual)}, bathed in warm light as the moment turns joyful.`; last.narration = 'And this time, it ends exactly as it should.'; last.music = 'Score lifts into a bright, major-key resolution';
     reply = 'Rewrote the ending to land on a warmer, happier note. Only the final scene changed.';
   } else if (/shorten|trim|cut down/.test(t) && /(intro|opening|beginning|first)/.test(t)) {
-    p.scenes[0].seconds = Math.max(2, Math.ceil(p.scenes[0].seconds / 2)); reply = `Shortened the opening to ${p.scenes[0].seconds} seconds.`;
+    p.scenes[0].seconds = Math.max(3, Math.ceil(p.scenes[0].seconds / 2)); reply = `Shortened the opening to ${p.scenes[0].seconds} seconds.`;
   } else if (/(extend|lengthen|longer)/.test(t) && /(end|final|last)/.test(t)) {
     last.seconds = Math.min(10, last.seconds + 3); reply = `Extended the final scene to ${last.seconds} seconds.`;
   } else if ((m = instruction.match(/(?:change|move|set|switch)[^.]*?(?:setting|location|place|it|story)?\s*(?:to|in)\s+(.+)$/i)) && /setting|location|set (it|the)|keep the story/.test(t)) {
@@ -236,7 +236,7 @@ export function builtinEdit(plan: Plan, instruction: string, sceneId?: string | 
 export async function applyEdit(plan: Plan, instruction: string, sceneId?: string | null): Promise<EditResult & { source: string }> {
   const compact = plan.scenes.map(s => ({ id: s.id, n: s.n, title: s.title, seconds: s.seconds, visual: s.visual, camera: s.camera, lighting: s.lighting, narration: s.narration, onscreen: s.onscreen, sound: s.sound, music: s.music }));
   const j = await llmJSON(
-    'You are a film director editing an approved production plan from a spoken instruction. Change only what the instruction requires and preserve every other approved element. Return JSON: reply (one or two sentences telling the customer what changed), plan (optional object with any of: tone, look, setting, music_direction, voice, cta), scenes (array of ONLY the scenes you changed, each with id and the changed fields among title, seconds(2-10), visual, camera, lighting, narration, onscreen, sound, music). If the instruction is unclear, change nothing and ask one question in reply.',
+    'You are a film director editing an approved production plan from a spoken instruction. Change only what the instruction requires and preserve every other approved element. Return JSON: reply (one or two sentences telling the customer what changed), plan (optional object with any of: tone, look, setting, music_direction, voice, cta), scenes (array of ONLY the scenes you changed, each with id and the changed fields among title, seconds(3-10), visual, camera, lighting, narration, onscreen, sound, music). If the instruction is unclear, change nothing and ask one question in reply.',
     JSON.stringify({ instruction, selected_scene_id: sceneId || null, plan: { title: plan.title, tone: plan.tone, look: plan.look, setting: plan.setting, music_direction: plan.music_direction, voice: plan.voice }, scenes: compact }));
   if (j && typeof j.reply === 'string') {
     const p: Plan = structuredClone(plan);
@@ -244,7 +244,7 @@ export async function applyEdit(plan: Plan, instruction: string, sceneId?: strin
     for (const x of Array.isArray(j.scenes) ? j.scenes : []) {
       const s = p.scenes.find(s => s.id === x?.id); if (!s) continue;
       for (const k of ['title', 'visual', 'camera', 'lighting', 'narration', 'onscreen', 'sound', 'music'] as const) if (typeof x[k] === 'string') (s as any)[k] = x[k];
-      if (Number.isFinite(+x.seconds)) s.seconds = Math.max(2, Math.min(10, Math.round(+x.seconds)));
+      if (Number.isFinite(+x.seconds)) s.seconds = Math.max(3, Math.min(10, Math.round(+x.seconds)));
     }
     return { plan: p, changed: settle(plan, p), reply: j.reply, source: 'ai' };
   }

@@ -18,7 +18,7 @@ export const POST = (req: Request) => withUser(req, async (user, b) => {
   if (prompt.length < 8) return fail(400, 'Describe your idea in a sentence or two.');
   const check = policyCheck(prompt); if (!check.ok) return fail(422, check.reason!);
   const plan = membership(user).plan!;
-  const duration = Math.max(6, Math.min(180, Math.round(+b.duration || 30)));
+  const duration = Math.max(9, Math.min(180, Math.round(+b.duration || 30)));
   if (duration > plan.maxSeconds) return fail(402, `${plan.name} productions run up to ${plan.maxSeconds} seconds. Choose a shorter length or upgrade.`, { needsPlan: true });
   const base: any = {
     user_id: user.id, kind: 'production', prompt, style: STYLES.includes(b.style) ? b.style : 'Cinematic', duration,

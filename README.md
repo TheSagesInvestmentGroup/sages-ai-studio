@@ -28,7 +28,7 @@ npm run build      # production build
 | Three treatments, scene plans, conversational edits | Yes (built-in rule-based director) | `DEEPSEEK_API_KEY` (or any OpenAI-compatible key) for far better writing |
 | Preview with captions and narration | Yes (storyboard animatic, browser voice) | — |
 | Rendered video | No | `RUNWAY_API_KEY` |
-| Studio-quality narration | No | `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` |
+| Studio-quality narration | No | the same `RUNWAY_API_KEY` (ElevenLabs voices through Runway) |
 | Memberships and payments | Demo activation only | Stripe keys and five price IDs |
 | Support escalation email | Ticket is flagged in the control center | `RESEND_API_KEY` |
 
