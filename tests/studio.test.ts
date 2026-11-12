@@ -1,0 +1,105 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { timeScenes, sceneCount, builtinTreatments, builtinPlan, builtinEdit, estimate, policyCheck, subjectOf } from '../lib/director';
+import { parseResume, careerPlan } from '../lib/career';
+import { PLANS, sceneCost } from '../lib/plans';
+
+const brief = { prompt: 'Create a video of a futuristic city with flying cars.', style: 'Sci-Fi', duration: 30, aspect: '16:9' };
+
+test('scene timing adds up and respects 2-10 second clip limits', () => {
+  for (const d of [15, 30, 60, 90, 180]) {
+    const secs = timeScenes(d, sceneCount(d));
+    assert.equal(secs.reduce((a, b) => a + b, 0), d, `total for ${d}`);
+    assert.ok(secs.every(s => s >= 2 && s <= 10), `limits for ${d}`);
+  }
+});
+
+test('subject is extracted from the request', () => assert.equal(subjectOf(brief.prompt), 'a futuristic city with flying cars'));
+
+test('three distinct treatments, original idea preserved', () => {
+  const t = builtinTreatments(brief);
+  assert.equal(t.length, 3); assert.equal(new Set(t.map(x => x.name)).size, 3);
+  assert.ok(t.every(x => x.pitch.toLowerCase().includes('futuristic city')));
+});
+
+test('plan covers the full running time', () => {
+  const p = builtinPlan(brief, builtinTreatments(brief)[0]);
+  assert.equal(p.scenes.length, 5); assert.equal(p.scenes.reduce((a, s) => a + s.seconds, 0), 30);
+  const long = builtinPlan({ ...brief, duration: 180 }, null);
+  assert.equal(long.scenes.reduce((a, s) => a + s.seconds, 0), 180);
+});
+
+test('editing one scene leaves every other scene untouched (selective regeneration)', () => {
+  const p = builtinPlan(brief, null); p.scenes.forEach(s => { s.status = 'ready'; s.clip_url = 'x'; s.approved = true; });
+  const r = builtinEdit(p, 'Add a sunset', p.scenes[2].id);
+  assert.deepEqual(r.changed, [p.scenes[2].id]);
+  assert.equal(r.plan.scenes[2].status, 'stale');
+  assert.ok(r.plan.scenes.filter((_, i) => i !== 2).every(s => s.status === 'ready' && s.approved));
+  assert.equal(estimate(r.plan, false).scenes, 1);
+});
+
+test('happier ending changes only the last scene; narration change re-renders nothing', () => {
+  const p = builtinPlan(brief, null); p.scenes.forEach(s => { s.status = 'ready'; s.clip_url = 'x'; });
+  assert.deepEqual(builtinEdit(p, 'Create a happier ending').changed, [p.scenes[4].id]);
+  const v = builtinEdit(p, 'Make the narration more emotional');
+  assert.equal(v.changed.length, 0); assert.ok(v.plan.scenes.every(s => s.status === 'ready'));
+});
+
+test('recut to a new length', () => {
+  const r = builtinEdit(builtinPlan({ ...brief, duration: 60 }, null), 'Turn this into a 15-second commercial');
+  assert.equal(r.plan.scenes.reduce((a, s) => a + s.seconds, 0), 15); assert.equal(r.retimed, 15);
+});
+
+test('an add request with no scene selected asks instead of guessing', () => {
+  const p = builtinPlan(brief, null), r = builtinEdit(p, 'Add an explosion');
+  assert.equal(r.changed.length, 0); assert.match(r.reply, /Which scene/);
+});
+
+test('content rules', () => {
+  assert.equal(policyCheck('A sunrise over the ocean').ok, true);
+  assert.equal(policyCheck('explicit scene with a minor').ok, false);
+  assert.equal(policyCheck('deepfake of the president giving a speech').ok, false);
+});
+
+test('credit maths: a full allowance covers the monthly productions at a typical length', () => {
+  assert.equal(sceneCost(5, true), 22);
+  for (const p of PLANS.filter(p => p.id !== 'bio')) assert.ok(p.credits >= p.videos * 30 * 4, `${p.name} covers ${p.videos} thirty-second productions`);
+});
+
+const RESUME = `Jordan Ellis
+Chief Risk Officer
+jordan@example.com | 555-010-2000
+
+Summary
+Risk executive with twenty years across banking and cybersecurity.
+
+Experience
+Chief Risk Officer, Harbor National Bank, 2018 - Present
+• Reduced operational losses by 31 percent over three years
+• Built the bank's first cyber risk committee
+VP Technology Risk | Northwind Financial | 2011 – 2018
+- Led a team of 40 across three regions
+
+Education
+MBA, University of Chicago
+Certifications
+CISSP
+CRISC`;
+
+test('résumé parser reorganises without inventing', () => {
+  const f = parseResume(RESUME);
+  assert.equal(f.name, 'Jordan Ellis'); assert.equal(f.headline, 'Chief Risk Officer');
+  assert.equal(f.roles.length, 2); assert.equal(f.roles[0].company, 'Harbor National Bank'); assert.equal(f.roles[0].highlights.length, 2);
+  assert.equal(f.roles[1].title, 'VP Technology Risk');
+  assert.deepEqual(f.credentials, ['CISSP', 'CRISC']); assert.deepEqual(f.education, ['MBA, University of Chicago']);
+});
+
+test('career script uses only approved facts', () => {
+  const f = parseResume(RESUME), p = careerPlan(f, { style: 'Executive', person: 'first', structure: 'chronological', seconds: 60, maxScenes: 5, kind: 'Video résumé' });
+  assert.equal(p.scenes.reduce((a, s) => a + s.seconds, 0), Math.min(60, p.scenes.length * 10)); // scenes are capped at 10 seconds each
+  const said = p.scenes.map(s => s.narration).join(' ');
+  assert.match(said, /Harbor National Bank/); assert.match(said, /Northwind Financial/); assert.match(said, /CISSP/);
+  const known = RESUME + ' Hello I’m I’d welcome the chance to talk about how can contribute Thank you for your time As at from to built the experience rely on today My credentials include';
+  for (const w of said.match(/\b[A-Z][a-z]{3,}\b/g) || []) assert.ok(known.includes(w), `"${w}" must come from the résumé or the fixed template`);
+  assert.ok(p.scenes.indexOf(p.scenes.find(s => /Northwind/.test(s.narration))!) < p.scenes.indexOf(p.scenes.find(s => /Harbor/.test(s.narration))!), 'chronological: oldest role first');
+});
