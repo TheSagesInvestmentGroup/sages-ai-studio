@@ -50,14 +50,29 @@ export function parseResume(text: string): Facts {
   return f;
 }
 
+const key = (r: Role) => `${r.title} ${r.company}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Keep whatever the plain reader found that the AI reader left out: whole positions, or bullets within one. */
+export function mergeFacts(ai: Facts, base: Facts): Facts {
+  const roles = ai.roles.map(r => ({ ...r, highlights: [...r.highlights] }));
+  for (const b of base.roles) {
+    if (!b.title && !b.company) continue;
+    const m = roles.find(r => (b.dates && r.dates && r.dates.replace(/\s/g, '') === b.dates.replace(/\s/g, '')) || (key(r) && (key(r).includes(key(b)) || key(b).includes(key(r)))));
+    if (!m) { if (b.dates) roles.push(b); continue; } // only add a missing position when the plain reader is sure it is one (it has dates)
+    if (b.highlights.length > m.highlights.length) m.highlights = b.highlights;
+  }
+  return { ...ai, roles: roles.slice(0, 20), education: ai.education.length >= base.education.length ? ai.education : base.education, credentials: ai.credentials.length >= base.credentials.length ? ai.credentials : base.credentials };
+}
+
 export async function extractFacts(text: string): Promise<{ facts: Facts; source: string }> {
   const base = parseResume(text);
   const j = await llmJSON(
-    'Extract career facts from the document. Use ONLY information present in the text. Never invent or embellish employers, titles, dates, degrees, certifications or achievements. JSON: name, headline, summary, roles[{title, company, dates, highlights[]}] (most recent first), education[], credentials[], skills[].',
-    text.slice(0, 14000));
+    'Extract career facts from the document. Use ONLY information present in the text. Never invent or embellish employers, titles, dates, degrees, certifications or achievements. Be complete: include EVERY position in the document, however old, and for each position EVERY bullet or sentence describing it, copied in full and not summarised, merged or shortened. Include every degree and every certification, licence and award. JSON: name, headline, summary, roles[{title, company, dates, highlights[]}] (most recent first), education[], credentials[], skills[].',
+    text.slice(0, 20000), 50000);
   if (j && Array.isArray(j.roles)) {
     const S = (v: any) => (typeof v === 'string' ? v : ''), A = (v: any) => (Array.isArray(v) ? v.map(S).filter(Boolean) : []);
-    return { facts: { name: S(j.name) || base.name, headline: S(j.headline), summary: S(j.summary), roles: j.roles.slice(0, 12).map((r: any) => ({ title: S(r?.title), company: S(r?.company), dates: S(r?.dates), highlights: A(r?.highlights).slice(0, 5) })), education: A(j.education), credentials: A(j.credentials), skills: A(j.skills).slice(0, 20) }, source: 'ai' };
+    const ai: Facts = { name: S(j.name) || base.name, headline: S(j.headline), summary: S(j.summary), roles: j.roles.slice(0, 20).map((r: any) => ({ title: S(r?.title), company: S(r?.company), dates: S(r?.dates), highlights: A(r?.highlights).slice(0, 15) })), education: A(j.education), credentials: A(j.credentials), skills: A(j.skills).slice(0, 20) };
+    return { facts: mergeFacts(ai, base), source: 'ai' };
   }
   return { facts: base, source: 'builtin' };
 }
