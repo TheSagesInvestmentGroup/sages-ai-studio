@@ -102,8 +102,16 @@ export function careerPlan(f: Facts, o: BioOptions): Plan {
   const intro = I ? `Hello, I’m ${name}.${f.headline ? ` ${f.headline}.` : ''}${f.summary ? ` ${f.summary.split(/(?<=\.)\s/)[0]}` : ''}` : `Meet ${name}.${f.headline ? ` ${f.headline}.` : ''}${f.summary ? ` ${f.summary.split(/(?<=\.)\s/)[0]}` : ''}`;
   scenes.push(mk('Intro', 'Introduction', `The presenter, in professional attire, speaks to camera in ${environmentFor(f.headline + ' ' + (roles[roles.length - 1]?.title || ''))}.`, intro.trim(), [name, f.headline].filter(Boolean).join(' · ')));
   for (const r of roles) {
-    const where = r.company ? ` at ${r.company}` : '', hi = r.highlights[0] ? ` ${r.highlights[0].replace(/\.$/, '')}.` : '';
-    const line = I ? `${r.title ? `As ${r.title}${where}` : `During my time${where}`}${r.dates ? `, from ${r.dates.replace(/\s*[-–—]\s*/, ' to ')},` : ','} I built the experience I rely on today.${hi}` : `${r.title ? `As ${r.title}${where}` : `During their time${where}`}${r.dates ? `, from ${r.dates.replace(/\s*[-–—]\s*/, ' to ')},` : ','} ${name.split(' ')[0]} built lasting experience.${hi}`;
+    const where = r.company ? ` at ${r.company}` : '', first = name.split(' ')[0];
+    // Dates such as "2019 - Present": a role that is still held is spoken in the present tense.
+    const [start, end] = (r.dates || '').split(/\s*[-–—]\s*|\s+to\s+/i).map(x => x.trim()), current = /present|current|now|today/i.test(end || '');
+    let hi = r.highlights[0] ? r.highlights[0].replace(/\.$/, '') : '';
+    if (hi && /^([A-Z][a-z]+ed|Led|Built|Grew|Ran|Won|Drove|Wrote|Oversaw|Set|Cut|Took|Made|Rebuilt|Began)\b/.test(hi)) hi = `${I ? 'I' : first} ${hi[0].toLowerCase()}${hi.slice(1)}`; // "Led a team" becomes "I led a team"
+    hi = hi ? ` ${hi}.` : '';
+    const what = r.title ? `${r.title}${where}` : '';
+    const line = current
+      ? `Today ${I ? 'I serve' : `${first} serves`}${what ? ` as ${what}` : where}${start ? `, a role ${I ? 'I have' : `${first} has`} held since ${start}` : ''}.${hi}`
+      : `${start && end ? `From ${start} to ${end} ` : ''}${I ? 'I' : first} ${what ? `${start && end ? 'was' : 'served as'} ${what}` : `worked${where}`}.${hi}`;
     scenes.push(mk('Role', [r.title, r.company].filter(Boolean).join(' · ') || 'Experience', `The background transitions to ${environmentFor(r.title + ' ' + r.company + ' ' + r.highlights.join(' '))} as the presenter continues. An illustrative environment, not the actual workplace.`, line, [r.title, r.company, r.dates].filter(Boolean).join(' · ')));
   }
   if (hasCreds) scenes.push(mk('Credentials', 'Education and credentials', 'Diplomas and certificates appear as elegant visual highlights beside the presenter.', `${I ? 'My' : 'Their'} credentials include ${[...f.education, ...f.credentials].slice(0, 3).join('; ')}.`, 'Education & Credentials'));
