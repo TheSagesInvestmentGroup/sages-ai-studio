@@ -18,7 +18,7 @@ const SPARKS: Record<string, string> = {
 
 export default function Studio() {
   const { me } = useMe();
-  const [prompt, setPrompt] = useState(''), [style, setStyle] = useState('Cinematic'), [duration, setDuration] = useState(30), [aspect, setAspect] = useState('16:9'), [category, setCategory] = useState(''), [mode, setMode] = useState<'quick' | 'pro'>('quick');
+  const [prompt, setPrompt] = useState(''), [style, setStyle] = useState('Cinematic'), [duration, setDuration] = useState(0), [aspect, setAspect] = useState('16:9'), [category, setCategory] = useState(''), [mode, setMode] = useState<'quick' | 'pro'>('quick');
   const [cast, setCast] = useState<any[]>([]), [castIds, setCastIds] = useState<string[]>([]), [recent, setRecent] = useState<any[]>([]), [busy, setBusy] = useState(''), [err, setErr] = useState<any>(null);
   useEffect(() => { api('/api/projects').then(r => setRecent(r.projects.slice(0, 4))).catch(() => {}); api('/api/characters').then(r => setCast(r.characters)).catch(() => {}); }, []);
   const maxSeconds = me?.plan?.maxSeconds || 60;
@@ -45,7 +45,7 @@ export default function Studio() {
         <textarea id="prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe your movie, video, commercial, or creative idea…" maxLength={3000} aria-label="Your idea" />
         <div className="grid g4">
           <label className="field">Style<select id="style" value={style} onChange={e => setStyle(e.target.value)}>{STYLES.map(s => <option key={s}>{s}</option>)}</select></label>
-          <label className="field">Length<select id="duration" value={duration} onChange={e => setDuration(+e.target.value)}>{DURATIONS.map(d => <option key={d} value={d} disabled={d > maxSeconds}>{d < 60 ? `${d} seconds` : d === 60 ? '1 minute' : d === 90 ? '90 seconds' : '3 minutes'}{d > maxSeconds ? ' (higher tier)' : ''}</option>)}</select></label>
+          <label className="field">Length<select id="duration" value={duration} onChange={e => setDuration(+e.target.value)}><option value={0}>Automatic (fits your idea)</option>{DURATIONS.map(d => <option key={d} value={d} disabled={d > maxSeconds}>{d < 60 ? `${d} seconds` : d === 60 ? '1 minute' : d === 90 ? '90 seconds' : `${d / 60} minutes`}{d > maxSeconds ? ' (higher tier)' : ''}</option>)}</select></label>
           <label className="field">Format<select id="aspect" value={aspect} onChange={e => setAspect(e.target.value)}>{ASPECTS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}</select></label>
           <label className="field">Kind of production<select id="category" value={category} onChange={e => setCategory(e.target.value)}><option value="">Let the director decide</option>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>
         </div>
