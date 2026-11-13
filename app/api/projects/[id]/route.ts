@@ -4,17 +4,18 @@ import { db, owned, now, audit } from '@/lib/store';
 import { membership, spendCredits } from '@/lib/auth';
 import { buildPlan, estimate, Plan, timeScenes, policyCheck } from '@/lib/director';
 import { briefOf, snapshot } from '@/lib/production';
-import { voiceLive, videoLive, musicSubmit } from '@/lib/providers';
+import { voiceLive, videoLive, musicSubmit, publishLive } from '@/lib/providers';
+import { isOwner } from '@/lib/auth';
 import { ASPECTS, VOICES } from '@/lib/plans';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 type Ctx = { params: { id: string } };
-const view = (p: any) => ({ project: p, estimate: p.plan ? estimate(p.plan, voiceLive()) : null, engines: { video: videoLive(), voice: voiceLive() } });
+const view = (p: any, owner = false) => ({ project: p, estimate: p.plan ? estimate(p.plan, voiceLive()) : null, engines: { video: videoLive(), voice: voiceLive(), publish: owner && publishLive() } });
 
 export const GET = (req: Request, { params }: Ctx) => withUser(req, async user => {
   const p = await owned('projects', params.id, user.id);
-  return p ? ok(view(p)) : fail(404, 'We could not find that project.');
+  return p ? ok(view(p, isOwner(user))) : fail(404, 'We could not find that project.');
 }, { limit: 240 });
 
 export const DELETE = (req: Request, { params }: Ctx) => withUser(req, async user => {
@@ -26,7 +27,7 @@ export const DELETE = (req: Request, { params }: Ctx) => withUser(req, async use
 export const PATCH = (req: Request, { params }: Ctx) => withUser(req, async (user, b) => {
   const p = await owned('projects', params.id, user.id); if (!p) return fail(404, 'We could not find that project.');
   const plan: Plan | undefined = p.plan, tier = membership(user).plan!;
-  const save = async (patch: any) => ok(view(await db.update('projects', p.id, { ...patch, updated_at: now() })));
+  const save = async (patch: any) => ok(view(await db.update('projects', p.id, { ...patch, updated_at: now() }), isOwner(user)));
   const copy = (extra: any) => { const { id, created_at, ...rest } = p; return db.insert('projects', { ...rest, shared: false, share_slug: null, counted: false, chat: [], versions: [], updated_at: now(), ...extra }); };
   const stripRenders = (pl: Plan): Plan => ({ ...pl, scenes: pl.scenes.map(s => ({ ...s, status: 'planned', clip_url: null, voice_url: null, job_id: null, approved: false })) });
 
