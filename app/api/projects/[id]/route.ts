@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { ok, fail, withUser, clean } from '@/lib/http';
 import { db, owned, now, audit } from '@/lib/store';
 import { membership, spendCredits } from '@/lib/auth';
-import { buildPlan, estimate, Plan, timeScenes, policyCheck } from '@/lib/director';
+import { buildPlan, estimate, Plan, timeScenes, policyCheck, secondsToSay } from '@/lib/director';
 import { briefOf, snapshot } from '@/lib/production';
 import { voiceLive, videoLive, musicSubmit, publishLive } from '@/lib/providers';
 import { isOwner } from '@/lib/auth';
@@ -94,6 +94,7 @@ export const PATCH = (req: Request, { params }: Ctx) => withUser(req, async (use
       const before = JSON.stringify([sc.visual, sc.camera, sc.lighting, sc.seconds]);
       for (const k of ['title', 'visual', 'camera', 'lighting', 'narration', 'onscreen', 'sound', 'music'] as const) if (typeof b.fields?.[k] === 'string') (sc as any)[k] = clean(b.fields[k], 800);
       if (Number.isFinite(+b.fields?.seconds)) sc.seconds = Math.max(3, Math.min(10, Math.round(+b.fields.seconds)));
+      sc.seconds = Math.max(sc.seconds, secondsToSay(sc.narration)); // a scene is never shorter than its line takes to say
       if (before !== JSON.stringify([sc.visual, sc.camera, sc.lighting, sc.seconds]) && sc.clip_url) sc.status = 'stale';
       if (typeof b.fields?.narration === 'string') sc.voice_url = null;
       sc.approved = false;
