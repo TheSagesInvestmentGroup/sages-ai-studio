@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/client';
 import Player from '@/components/Player';
 import { useMe, Toast, NeedPlan } from '@/components/useMe';
-import { ASPECTS } from '@/lib/plans';
+import { ASPECTS, VOICES } from '@/lib/plans';
 
 const PILL: Record<string, [string, string]> = { planned: ['Planned', ''], rendering: ['Rendering', 'info'], ready: ['Rendered', 'good'], failed: ['Failed', 'bad'], stale: ['Needs new render', 'warn'] };
 const IDEAS = ['Make it more dramatic', 'Create a happier ending', 'Shorten the introduction', 'Turn this into a 15-second commercial', 'Make the narration more emotional', 'Add suspenseful music'];
@@ -20,7 +20,8 @@ export default function Workspace({ params }: { params: { id: string } }) {
   const load = useCallback(() => api(`/api/projects/${params.id}`).then(setD).catch(setErr), [params.id]);
   useEffect(() => { load(); }, [load]);
   // While scenes render, check on them every 6 seconds.
-  const rendering = scenes.some(s => s.status === 'rendering');
+  const voicing = !!d?.engines?.voice && !!p && !['concept', 'planned'].includes(p.status) && scenes.some(s => s.narration && !s.voice_url && !s.voice_failed);
+  const rendering = scenes.some(s => s.status === 'rendering') || voicing;
   useEffect(() => { if (!rendering) return; const t = setInterval(() => api(`/api/projects/${params.id}/poll`).then(r => { setD((x: any) => ({ ...x, project: r.project, estimate: r.estimate })); if (!r.project.plan.scenes.some((s: any) => s.status === 'rendering')) refresh(); }).catch(() => {}), 6000); return () => clearInterval(t); }, [rendering, params.id, refresh]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ block: 'nearest' }); }, [p?.chat?.length]);
 
@@ -151,6 +152,8 @@ export default function Workspace({ params }: { params: { id: string } }) {
                   <div className="row between small muted"><span>Your balance</span><span>{me?.user.credits?.toLocaleString() ?? '…'} credits</span></div>
                   <button className="btn primary block" id="produce" onClick={() => produce()} disabled={!!busy || rendering || !todo.length}>{rendering ? <><span className="spin" /> Rendering scenes…</> : busy === 'produce' ? <span className="spin" /> : todo.length ? `Render ${todo.length} scene${todo.length > 1 ? 's' : ''}` : 'All scenes rendered'}</button>
                   <p className="small faint">Only scenes that are new or changed are rendered. Failed renders are refunded.</p>
+                  <label className="field">Narrator voice<select id="narrator" value={plan.voice_preset || ''} onChange={e => e.target.value && op({ op: 'voice', preset: e.target.value }, 'Narrator changed. Recording the new narration now.')} disabled={!!busy}><option value="">Studio default</option>{VOICES.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+                  {voicing && <p className="small muted"><span className="spin" /> Recording narration…</p>}
                 </>
               ) : (
                 <>
