@@ -105,44 +105,73 @@ const STYLE_LOOK: Record<string, string> = {
 
 export interface BioOptions { style: string; person: 'first' | 'third'; structure: 'chronological' | 'achievement' | 'biography'; seconds: number; maxScenes: number; kind: string }
 
-/** Build the career video plan strictly from approved facts. */
+/** Build the career video plan strictly from approved facts.
+ *  The script sizes itself to the person: every position gets a scene, and each accomplishment gets as many
+ *  scenes as it takes to say in full, added newest position first until the chosen length is used up. */
 export function careerPlan(f: Facts, o: BioOptions): Plan {
-  const I = o.person === 'first', name = f.name || 'the presenter';
-  let roles = f.roles.filter(r => r.title || r.company);
-  if (o.structure !== 'achievement') roles = [...roles].reverse(); // résumés list newest first; tell the story oldest to newest
-  else roles = [...roles].sort((a, b) => b.highlights.length - a.highlights.length);
-  const room = Math.max(1, Math.min(o.maxScenes, Math.floor(o.seconds / 8)) - 2);
-  roles = o.structure === 'achievement' ? roles.slice(0, room) : roles.slice(-room);
+  const I = o.person === 'first', name = f.name || 'the presenter', first = name.split(' ')[0];
   const creds = realItems([...f.education, ...f.credentials]), hasCreds = creds.length > 0;
   const look = STYLE_LOOK[o.style] || STYLE_LOOK.Executive;
   const mk = (beat: string, title: string, visual: string, narration: string, lower = ''): Scene => ({ id: Math.random().toString(36).slice(2, 10), n: 0, beat, title, seconds: 6, visual, camera: beat === 'Intro' ? 'Slow push-in to a medium close-up' : 'Smooth lateral move as the background transitions', lighting: look, narration, onscreen: '', lower_third: lower, sound: 'Subtle room tone', music: 'Understated professional underscore', status: 'planned' });
 
-  // A scene runs at most 10 seconds, about 24 spoken words. Whole sentences are added only while they fit,
-  // so the narration is never cut off mid-sentence. Longer detail stays on the portfolio page.
+  // A scene runs at most 10 seconds, about 24 spoken words. Text is only ever split, never shortened or reworded.
   const words = (t: string) => t.trim().split(/\s+/).filter(Boolean).length, LIMIT = 24;
-  const fit = (first: string, ...more: string[]) => more.filter(Boolean).reduce((t, x) => (words(t) + words(x) <= LIMIT ? `${t} ${x}` : t), first.trim());
-  const scenes: Scene[] = [];
-  const intro = fit(I ? `Hello, I’m ${name}.` : `Meet ${name}.`, f.headline ? `${f.headline}.` : '', f.summary ? f.summary.split(/(?<=\.)\s/)[0] : '');
-  scenes.push(mk('Intro', 'Introduction', `The presenter, in professional attire, speaks to camera in ${environmentFor(f.headline + ' ' + (roles[roles.length - 1]?.title || ''))}.`, intro.trim(), [name, f.headline].filter(Boolean).join(' · ')));
-  for (const r of roles) {
-    const where = r.company ? ` at ${r.company}` : '', first = name.split(' ')[0];
+  const secsFor = (t: string) => Math.max(4, Math.min(10, Math.ceil(words(t) / 2.5) + 1));
+  const fit = (lead: string, ...more: string[]) => more.filter(Boolean).reduce((t, x) => (words(t) + words(x) <= LIMIT ? `${t} ${x}` : t), lead.trim());
+  const pack = (units: string[]) => units.reduce<string[]>((out, u) => { const last = out[out.length - 1]; if (last && words(last) + words(u) <= LIMIT) out[out.length - 1] = `${last} ${u}`; else out.push(u); return out; }, []);
+  /** One accomplishment as lines that can each be said in a single scene: by sentence, then clause, then length. */
+  const ABBR = /(?:\b(?:Sr|Jr|Mr|Mrs|Ms|Dr|Inc|Co|Corp|Ltd|Dept|vs|etc|No|St|U\.S|e\.g|i\.e)|\b[A-Z])\.$/; // "Sr." does not end a sentence
+  const sentences = (text: string) => text.split(/(?<=[.!?;])\s+/).filter(Boolean).reduce<string[]>((out, s) => { const last = out[out.length - 1]; if (last && ABBR.test(last)) out[out.length - 1] = `${last} ${s}`; else out.push(s); return out; }, []);
+  const chunk = (text: string): string[] => pack(sentences(text).flatMap(sent => words(sent) <= LIMIT ? [sent] : pack(sent.split(/(?<=[,:])\s+/).flatMap(cl => { const w = cl.split(/\s+/); return w.length <= LIMIT ? [cl] : Array.from({ length: Math.ceil(w.length / 20) }, (_, i) => w.slice(i * 20, i * 20 + 20).join(' ')); }))));
+
+  const intro = mk('Intro', 'Introduction', `The presenter, in professional attire, speaks to camera in ${environmentFor(f.headline + ' ' + (f.roles[0]?.title || ''))}.`, fit(I ? `Hello, I’m ${name}.` : `Meet ${name}.`, f.headline ? `${f.headline}.` : '', f.summary ? f.summary.split(/(?<=\.)\s/)[0] : ''), [name, f.headline].filter(Boolean).join(' · '));
+  const credScene = hasCreds ? mk('Credentials', 'Education and credentials', 'Diplomas and certificates appear as elegant visual highlights beside the presenter.', (() => { const lead = `${I ? 'My' : 'Their'} credentials include`; let list = [creds[0]]; for (const c of creds.slice(1, 4)) if (words(`${lead} ${[...list, c].join('; ')}`) <= LIMIT) list.push(c); else break; return `${lead} ${list.join('; ')}.`; })(), 'Education & Credentials') : null;
+  const close = mk('Close', 'Closing', 'The presenter returns to the opening setting and closes with a confident, warm look to camera.', I ? `I’d welcome the chance to talk about how I can contribute. Thank you for your time.` : `${first} welcomes the opportunity to connect. Thank you for watching.`, name);
+
+  // Positions in priority order: newest first (résumés list them that way), or the most detailed first.
+  let order = f.roles.filter(r => r.title || r.company);
+  if (o.structure === 'achievement') order = [...order].sort((a, b) => b.highlights.length - a.highlights.length);
+  const built = order.map(r => {
+    const where = r.company ? ` at ${r.company}` : '', what = r.title ? `${r.title}${where}` : '';
     // Dates such as "2019 - Present": a role that is still held is spoken in the present tense.
     const [start, end] = (r.dates || '').split(/\s*[-–—]\s*|\s+to\s+/i).map(x => x.trim()), current = /present|current|now|today/i.test(end || '');
-    let hi = r.highlights[0] ? r.highlights[0].replace(/\.$/, '') : '';
-    if (hi && /^([A-Z][a-z]+ed|Led|Built|Grew|Ran|Won|Drove|Wrote|Oversaw|Set|Cut|Took|Made|Rebuilt|Began)\b/.test(hi)) hi = `${I ? 'I' : first} ${hi[0].toLowerCase()}${hi.slice(1)}`; // "Led a team" becomes "I led a team"
-    hi = hi ? `${hi}.` : '';
-    const what = r.title ? `${r.title}${where}` : '';
     const line = current
-      ? fit(`Today ${I ? 'I serve' : `${first} serves`}${what ? ` as ${what}` : where}${start ? `, a role ${I ? 'I have' : `${first} has`} held since ${start}` : ''}.`, hi)
-      : fit(`${start && end ? `From ${start} to ${end} ` : ''}${I ? 'I' : first} ${what ? `${start && end ? 'was' : 'served as'} ${what}` : `worked${where}`}.`, hi);
-    scenes.push(mk('Role', [r.title, r.company].filter(Boolean).join(' · ') || 'Experience', `The background transitions to ${environmentFor(r.title + ' ' + r.company + ' ' + r.highlights.join(' '))} as the presenter continues. An illustrative environment, not the actual workplace.`, line, [r.title, r.company, r.dates].filter(Boolean).join(' · ')));
+      ? `Today ${I ? 'I serve' : `${first} serves`}${what ? ` as ${what}` : where}${start ? `, a role ${I ? 'I have' : `${first} has`} held since ${start}` : ''}.`
+      : `${start && end ? `From ${start} to ${end} ` : ''}${I ? 'I' : first} ${what ? `${start && end ? 'was' : 'served as'} ${what}` : `worked${where}`}.`;
+    const points = r.highlights.map(h => h.trim()).filter(Boolean).map(h => {
+      let t = /[.!?]$/.test(h) ? h : `${h}.`;
+      if (/^([A-Z][a-z]+ed|Led|Built|Grew|Ran|Won|Drove|Wrote|Oversaw|Set|Cut|Took|Made|Rebuilt|Began)\b/.test(t)) t = `${I ? 'I' : first} ${t[0].toLowerCase()}${t.slice(1)}`; // "Led a team" becomes "I led a team"
+      return chunk(t);
+    });
+    const env = environmentFor(r.title + ' ' + r.company + ' ' + r.highlights.join(' ')), lower = [r.title, r.company, r.dates].filter(Boolean).join(' · ');
+    return { r, line, points, env, lower, use: false, taken: 0, merged: false };
+  });
+
+  // Spend the chosen length: the fixed scenes, then a scene per position, then accomplishments one round at a time.
+  const fixed = [intro, credScene, close].filter(Boolean) as Scene[];
+  let left = o.seconds - fixed.reduce((a, s) => a + secsFor(s.narration), 0), count = fixed.length;
+  for (const b of built) { const c = secsFor(b.line); if (count === fixed.length || (left >= c && count < o.maxScenes)) { b.use = true; left -= c; count++; } }
+  for (const b of built) if (b.use && b.points[0]?.length === 1 && words(b.line) + words(b.points[0][0]) <= LIMIT) { // a short first accomplishment shares the position's scene
+    const grow = secsFor(`${b.line} ${b.points[0][0]}`) - secsFor(b.line); if (grow <= left) { b.merged = true; b.taken = 1; left -= grow; }
   }
-  if (hasCreds) scenes.push(mk('Credentials', 'Education and credentials', 'Diplomas and certificates appear as elegant visual highlights beside the presenter.', (() => { const lead = `${I ? 'My' : 'Their'} credentials include`; let list = [creds[0]]; for (const c of creds.slice(1, 4)) if (words(`${lead} ${[...list, c].join('; ')}`) <= LIMIT) list.push(c); else break; return `${lead} ${list.join('; ')}.`; })(), 'Education & Credentials'));
-  scenes.push(mk('Close', 'Closing', 'The presenter returns to the opening setting and closes with a confident, warm look to camera.', I ? `I’d welcome the chance to talk about how I can contribute. Thank you for your time.` : `${name.split(' ')[0]} welcomes the opportunity to connect. Thank you for watching.`, name));
-  // Each scene lasts as long as its narration takes to say (about 2.5 words a second), then spare time is shared out.
-  const secs = scenes.map(s => Math.max(4, Math.min(10, Math.ceil(words(s.narration) / 2.5) + 1)));
-  for (let spare = Math.min(o.seconds, scenes.length * 10) - secs.reduce((a, b) => a + b, 0), i = 0, guard = 0; spare > 0 && guard++ < 400; i++) if (secs[i % secs.length] < 10) { secs[i % secs.length]++; spare--; }
-  scenes.forEach((s, i) => { s.n = i + 1; s.seconds = secs[i]; });
+  for (let round = 0, added = true; added; round++) {
+    added = false;
+    for (const b of built) {
+      const i = b.merged ? round + 1 : round; if (!b.use || b.taken !== i || i >= b.points.length) continue;
+      const cost = b.points[i].reduce((a, t) => a + secsFor(t), 0);
+      if (cost <= left && count + b.points[i].length <= o.maxScenes) { b.taken++; left -= cost; count += b.points[i].length; added = true; }
+    }
+  }
+
+  const told = built.filter(b => b.use), scenes: Scene[] = [intro];
+  for (const b of o.structure === 'achievement' ? told : [...told].reverse()) { // chronological: oldest position first
+    const label = [b.r.title, b.r.company].filter(Boolean).join(' · ') || 'Experience';
+    scenes.push(mk('Role', label, `The background transitions to ${b.env} as the presenter continues. An illustrative environment, not the actual workplace.`, b.merged ? `${b.line} ${b.points[0][0]}` : b.line, b.lower));
+    b.points.slice(b.merged ? 1 : 0, b.taken).forEach(lines => lines.forEach(t => scenes.push(mk('Achievement', `${label} · accomplishment`, `A cinematic illustration of this accomplishment, set in ${b.env}: ${t} Illustrative imagery, not the actual workplace or people.`, t, b.lower))));
+  }
+  if (credScene) scenes.push(credScene);
+  scenes.push(close);
+  scenes.forEach((s, i) => { s.n = i + 1; s.seconds = secsFor(s.narration); }); // each scene lasts as long as its line takes to say
   return {
     title: `${name} — ${o.kind}`, logline: `${o.style} ${o.kind.toLowerCase()} for ${name}, told in the ${I ? 'first' : 'third'} person from reviewed facts.`,
     tone: `${o.style}, credible, warm`, look, audience: 'Recruiters, hiring managers and business partners',
