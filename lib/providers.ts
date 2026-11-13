@@ -60,8 +60,8 @@ async function rwSubmit(path: string, body: any): Promise<{ id?: string; error?:
 export const videoSubmit = (prompt: string, aspect: string, seconds: number) =>
   rwSubmit('/v1/text_to_video', { model: cfg.runwayModel, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
 
-export const voiceSubmit = (text: string) =>
-  rwSubmit('/v1/text_to_speech', { model: cfg.runwayVoiceModel, promptText: text.slice(0, 2000), voice: { type: 'runway-preset', presetId: cfg.runwayVoice } });
+export const voiceSubmit = (text: string, preset?: string) =>
+  rwSubmit('/v1/text_to_speech', { model: cfg.runwayVoiceModel, promptText: text.slice(0, 2000), voice: { type: 'runway-preset', presetId: preset || cfg.runwayVoice } });
 
 /** Status of any Runway task (video or voice). */
 export async function videoStatus(id: string): Promise<{ state: 'working' | 'done' | 'failed'; url?: string; error?: string }> {
