@@ -189,6 +189,7 @@ export default function Workspace({ params }: { params: { id: string } }) {
                     <a className="chip" target="_blank" rel="noreferrer" href={`https://www.threads.net/intent/post?text=${shareText}%20${u}`}>Threads</a>
                   </div>
                   <p className="small faint">For Instagram, TikTok and YouTube, export the video file and upload it in their apps, with this link in the caption.</p>
+                  {d.engines.publish && <PublishPanel id={params.id} title={p.title} say={say} />}
                 </>
               )}
             </div>
@@ -223,6 +224,34 @@ export default function Workspace({ params }: { params: { id: string } }) {
         </div>
       )}
       <Toast text={toast} />
+    </div>
+  );
+}
+
+// Owner only: post the share link to channels connected in Postiz.
+function PublishPanel({ id, title, say }: { id: string; title: string; say: (t: string) => void }) {
+  const [channels, setChannels] = useState<any[] | null>(null), [picked, setPicked] = useState<string[]>([]), [caption, setCaption] = useState(`${title} — made with The Sages AI Studio`), [at, setAt] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  useEffect(() => { api(`/api/projects/${id}/publish`).then(r => setChannels(r.channels)).catch((e: any) => { setErr(e.message); setChannels([]); }); }, [id]);
+  const usable = (channels || []).filter(c => c.ok);
+  async function post() {
+    setErr(''); setBusy(true);
+    try { const r = await api(`/api/projects/${id}/publish`, 'POST', { channelIds: picked, caption, at: at ? new Date(at).toISOString() : '' }); say(r.at ? `Scheduled on ${r.posted} channel${r.posted > 1 ? 's' : ''}.` : `Posted to ${r.posted} channel${r.posted > 1 ? 's' : ''}.`); setPicked([]); }
+    catch (e: any) { setErr(e.message); }
+    setBusy(false);
+  }
+  return (
+    <div className="stack" id="publish-panel" style={{ borderTop: '1px solid var(--line, #2a2f45)', paddingTop: 12 }}>
+      <h4>Post to my channels</h4>
+      {err && <div className="notice bad" role="alert">{err}</div>}
+      {channels === null ? <p className="small muted"><span className="spin" /> Loading your channels…</p> : usable.length === 0 ? <p className="small muted">No channels that accept a link post are connected in Postiz yet.</p> : (
+        <>
+          <div className="row" style={{ gap: 12 }}>{usable.map(c => <label key={c.id} className="check"><input type="checkbox" checked={picked.includes(c.id)} onChange={e => setPicked(e.target.checked ? [...picked, c.id] : picked.filter(x => x !== c.id))} />{c.name} <span className="faint">({c.network})</span></label>)}</div>
+          <label className="field">Caption<textarea id="publish-caption" value={caption} onChange={e => setCaption(e.target.value)} maxLength={1200} rows={3} /></label>
+          <label className="field">When (leave empty to post now)<input id="publish-at" type="datetime-local" value={at} onChange={e => setAt(e.target.value)} /></label>
+          <div className="row"><button className="btn" id="publish-go" onClick={post} disabled={busy || !picked.length}>{busy ? 'Sending…' : at ? 'Schedule post' : 'Post now'}</button><span className="small faint">The share link is added under your caption.</span></div>
+        </>
+      )}
+      {(channels || []).some(c => !c.ok) && <p className="small faint">Instagram, TikTok and YouTube need the video file itself, so they are not offered here.</p>}
     </div>
   );
 }
