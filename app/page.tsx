@@ -63,7 +63,7 @@ export default async function Home() {
 
       <section className="section" style={{ background: 'var(--stage)', borderBlock: '1px solid var(--line-soft)' }}>
         <div className="wrap grid g2" style={{ alignItems: 'center', gap: 36 }}>
-          <img src="/studio-control.jpg" alt="A production control room with editors working at a wall of screens" style={{ borderRadius: 16, border: '1px solid var(--line)' }} width={1400} height={799} />
+          <img src="/brand/production-team.jpg" alt="The Sages AI Studio: a full production team behind one prompt. Creative director, screenwriter, cinematographer, casting director, voice director, composer and sound designer, film editor and executive producer." style={{ borderRadius: 16, border: '1px solid var(--line)', width: '100%', height: 'auto' }} width={1672} height={941} loading="lazy" />
           <div className="stack-lg">
             <div className="stack"><span className="eyebrow">Your crew</span><h2>A full production team behind one prompt</h2><p className="muted">You never have to learn editing software. Each specialist works behind the scenes and answers to you.</p></div>
             <div className="grid g2" style={{ gap: 18 }}>{CREW.map(([t, d]) => <div key={t}><h3 style={{ fontSize: '1rem' }}>{t}</h3><p className="muted small">{d}</p></div>)}</div>
