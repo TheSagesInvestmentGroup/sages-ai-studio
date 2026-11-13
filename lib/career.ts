@@ -3,7 +3,6 @@
 // script comes from facts the member has reviewed and approved.
 import { llmJSON } from './providers';
 import type { Plan, Scene } from './director';
-import { timeScenes } from './director';
 
 export interface Role { title: string; company: string; dates: string; highlights: string[] }
 export interface Facts { name: string; headline: string; summary: string; roles: Role[]; education: string[]; credentials: string[]; skills: string[] }
@@ -50,6 +49,10 @@ export function parseResume(text: string): Facts {
   return f;
 }
 
+/** Section headings sometimes get read as list items ("Education", "Certifications:"). They are not facts. */
+const LABEL = /^(education|academic background|certifications?|licen[sc]es?|credentials|awards|honou?rs|skills|training)(\s*(and|&|,)\s*(certifications?|licen[sc]es?|credentials|awards|honou?rs|training))*\s*:?$/i;
+export const realItems = (list: string[]) => list.map(x => x.trim()).filter(x => x && !LABEL.test(x));
+
 const key = (r: Role) => `${r.title} ${r.company}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 /** Keep whatever the plain reader found that the AI reader left out: whole positions, or bullets within one. */
@@ -61,7 +64,8 @@ export function mergeFacts(ai: Facts, base: Facts): Facts {
     if (!m) { if (b.dates) roles.push(b); continue; } // only add a missing position when the plain reader is sure it is one (it has dates)
     if (b.highlights.length > m.highlights.length) m.highlights = b.highlights;
   }
-  return { ...ai, roles: roles.slice(0, 20), education: ai.education.length >= base.education.length ? ai.education : base.education, credentials: ai.credentials.length >= base.credentials.length ? ai.credentials : base.credentials };
+  const edu = realItems(ai.education), baseEdu = realItems(base.education), cred = realItems(ai.credentials), baseCred = realItems(base.credentials);
+  return { ...ai, roles: roles.slice(0, 20), education: edu.length >= baseEdu.length ? edu : baseEdu, credentials: cred.length >= baseCred.length ? cred : baseCred };
 }
 
 export async function extractFacts(text: string): Promise<{ facts: Facts; source: string }> {
@@ -74,7 +78,7 @@ export async function extractFacts(text: string): Promise<{ facts: Facts; source
     const ai: Facts = { name: S(j.name) || base.name, headline: S(j.headline), summary: S(j.summary), roles: j.roles.slice(0, 20).map((r: any) => ({ title: S(r?.title), company: S(r?.company), dates: S(r?.dates), highlights: A(r?.highlights).slice(0, 15) })), education: A(j.education), credentials: A(j.credentials), skills: A(j.skills).slice(0, 20) };
     return { facts: mergeFacts(ai, base), source: 'ai' };
   }
-  return { facts: base, source: 'builtin' };
+  return { facts: { ...base, education: realItems(base.education), credentials: realItems(base.credentials) }, source: 'builtin' };
 }
 
 // Generated environments illustrate an industry. They are never presented as the real workplace.
@@ -109,12 +113,16 @@ export function careerPlan(f: Facts, o: BioOptions): Plan {
   else roles = [...roles].sort((a, b) => b.highlights.length - a.highlights.length);
   const room = Math.max(1, Math.min(o.maxScenes, Math.floor(o.seconds / 8)) - 2);
   roles = o.structure === 'achievement' ? roles.slice(0, room) : roles.slice(-room);
-  const hasCreds = f.education.length + f.credentials.length > 0;
+  const creds = realItems([...f.education, ...f.credentials]), hasCreds = creds.length > 0;
   const look = STYLE_LOOK[o.style] || STYLE_LOOK.Executive;
   const mk = (beat: string, title: string, visual: string, narration: string, lower = ''): Scene => ({ id: Math.random().toString(36).slice(2, 10), n: 0, beat, title, seconds: 6, visual, camera: beat === 'Intro' ? 'Slow push-in to a medium close-up' : 'Smooth lateral move as the background transitions', lighting: look, narration, onscreen: '', lower_third: lower, sound: 'Subtle room tone', music: 'Understated professional underscore', status: 'planned' });
 
+  // A scene runs at most 10 seconds, about 24 spoken words. Whole sentences are added only while they fit,
+  // so the narration is never cut off mid-sentence. Longer detail stays on the portfolio page.
+  const words = (t: string) => t.trim().split(/\s+/).filter(Boolean).length, LIMIT = 24;
+  const fit = (first: string, ...more: string[]) => more.filter(Boolean).reduce((t, x) => (words(t) + words(x) <= LIMIT ? `${t} ${x}` : t), first.trim());
   const scenes: Scene[] = [];
-  const intro = I ? `Hello, I’m ${name}.${f.headline ? ` ${f.headline}.` : ''}${f.summary ? ` ${f.summary.split(/(?<=\.)\s/)[0]}` : ''}` : `Meet ${name}.${f.headline ? ` ${f.headline}.` : ''}${f.summary ? ` ${f.summary.split(/(?<=\.)\s/)[0]}` : ''}`;
+  const intro = fit(I ? `Hello, I’m ${name}.` : `Meet ${name}.`, f.headline ? `${f.headline}.` : '', f.summary ? f.summary.split(/(?<=\.)\s/)[0] : '');
   scenes.push(mk('Intro', 'Introduction', `The presenter, in professional attire, speaks to camera in ${environmentFor(f.headline + ' ' + (roles[roles.length - 1]?.title || ''))}.`, intro.trim(), [name, f.headline].filter(Boolean).join(' · ')));
   for (const r of roles) {
     const where = r.company ? ` at ${r.company}` : '', first = name.split(' ')[0];
@@ -122,16 +130,18 @@ export function careerPlan(f: Facts, o: BioOptions): Plan {
     const [start, end] = (r.dates || '').split(/\s*[-–—]\s*|\s+to\s+/i).map(x => x.trim()), current = /present|current|now|today/i.test(end || '');
     let hi = r.highlights[0] ? r.highlights[0].replace(/\.$/, '') : '';
     if (hi && /^([A-Z][a-z]+ed|Led|Built|Grew|Ran|Won|Drove|Wrote|Oversaw|Set|Cut|Took|Made|Rebuilt|Began)\b/.test(hi)) hi = `${I ? 'I' : first} ${hi[0].toLowerCase()}${hi.slice(1)}`; // "Led a team" becomes "I led a team"
-    hi = hi ? ` ${hi}.` : '';
+    hi = hi ? `${hi}.` : '';
     const what = r.title ? `${r.title}${where}` : '';
     const line = current
-      ? `Today ${I ? 'I serve' : `${first} serves`}${what ? ` as ${what}` : where}${start ? `, a role ${I ? 'I have' : `${first} has`} held since ${start}` : ''}.${hi}`
-      : `${start && end ? `From ${start} to ${end} ` : ''}${I ? 'I' : first} ${what ? `${start && end ? 'was' : 'served as'} ${what}` : `worked${where}`}.${hi}`;
+      ? fit(`Today ${I ? 'I serve' : `${first} serves`}${what ? ` as ${what}` : where}${start ? `, a role ${I ? 'I have' : `${first} has`} held since ${start}` : ''}.`, hi)
+      : fit(`${start && end ? `From ${start} to ${end} ` : ''}${I ? 'I' : first} ${what ? `${start && end ? 'was' : 'served as'} ${what}` : `worked${where}`}.`, hi);
     scenes.push(mk('Role', [r.title, r.company].filter(Boolean).join(' · ') || 'Experience', `The background transitions to ${environmentFor(r.title + ' ' + r.company + ' ' + r.highlights.join(' '))} as the presenter continues. An illustrative environment, not the actual workplace.`, line, [r.title, r.company, r.dates].filter(Boolean).join(' · ')));
   }
-  if (hasCreds) scenes.push(mk('Credentials', 'Education and credentials', 'Diplomas and certificates appear as elegant visual highlights beside the presenter.', `${I ? 'My' : 'Their'} credentials include ${[...f.education, ...f.credentials].slice(0, 3).join('; ')}.`, 'Education & Credentials'));
+  if (hasCreds) scenes.push(mk('Credentials', 'Education and credentials', 'Diplomas and certificates appear as elegant visual highlights beside the presenter.', (() => { const lead = `${I ? 'My' : 'Their'} credentials include`; let list = [creds[0]]; for (const c of creds.slice(1, 4)) if (words(`${lead} ${[...list, c].join('; ')}`) <= LIMIT) list.push(c); else break; return `${lead} ${list.join('; ')}.`; })(), 'Education & Credentials'));
   scenes.push(mk('Close', 'Closing', 'The presenter returns to the opening setting and closes with a confident, warm look to camera.', I ? `I’d welcome the chance to talk about how I can contribute. Thank you for your time.` : `${name.split(' ')[0]} welcomes the opportunity to connect. Thank you for watching.`, name));
-  const secs = timeScenes(o.seconds, scenes.length);
+  // Each scene lasts as long as its narration takes to say (about 2.5 words a second), then spare time is shared out.
+  const secs = scenes.map(s => Math.max(4, Math.min(10, Math.ceil(words(s.narration) / 2.5) + 1)));
+  for (let spare = Math.min(o.seconds, scenes.length * 10) - secs.reduce((a, b) => a + b, 0), i = 0, guard = 0; spare > 0 && guard++ < 400; i++) if (secs[i % secs.length] < 10) { secs[i % secs.length]++; spare--; }
   scenes.forEach((s, i) => { s.n = i + 1; s.seconds = secs[i]; });
   return {
     title: `${name} — ${o.kind}`, logline: `${o.style} ${o.kind.toLowerCase()} for ${name}, told in the ${I ? 'first' : 'third'} person from reviewed facts.`,
