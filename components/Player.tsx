@@ -20,7 +20,7 @@ export default function Player({ scenes, aspect = '16:9', title, synthetic = tru
   const canvas = useRef<HTMLCanvasElement>(null);
   const st = useRef({ i: 0, t: 0, last: 0, playing: false, spoke: -1 });
   const vids = useRef<Record<string, HTMLVideoElement>>({}), audio = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false), [idx, setIdx] = useState(0), [captions, setCaptions] = useState(true), [voice, setVoice] = useState(true), [rec, setRec] = useState<'idle' | 'recording' | 'done'>('idle'), [file, setFile] = useState('');
+  const [playing, setPlaying] = useState(false), [idx, setIdx] = useState(0), [captions, setCaptions] = useState(false), [voice, setVoice] = useState(true), [rec, setRec] = useState<'idle' | 'recording' | 'done'>('idle'), [file, setFile] = useState('');
   const opts = useRef({ captions, voice, scenes }); opts.current = { captions, voice, scenes };
   const [W, H] = SIZE[aspect] || SIZE['16:9'];
   const recorder = useRef<MediaRecorder | null>(null);
@@ -132,7 +132,7 @@ export default function Player({ scenes, aspect = '16:9', title, synthetic = tru
         </div>
       </div>
       {rec === 'recording' && <p className="notice">Recording the preview in real time ({total} seconds). Keep this tab open.</p>}
-      {rec === 'done' && <p className="notice good">Your video file was saved to your downloads. {file && <a href={file} download>Download again</a>}. The file includes the picture, captions, recorded narration and soundtrack. The browser&rsquo;s built-in voice, used when no narration has been recorded, cannot be captured.</p>}
+      {rec === 'done' && <p className="notice good">Your video file was saved to your downloads. {file && <a href={file} download>Download again</a>}. The file includes the picture, recorded narration and soundtrack, plus captions when Captions is ticked. The browser&rsquo;s built-in voice, used when no narration has been recorded, cannot be captured.</p>}
       <div className="row" style={{ gap: 6 }}>{scenes.map((s, i) => <button key={s.id} className={`chip ${i === idx ? 'on' : ''}`} onClick={() => jump(i)} aria-label={`Go to scene ${s.n}`} disabled={rec === 'recording'}>{s.n}</button>)}</div>
     </div>
   );
