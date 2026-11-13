@@ -5,7 +5,7 @@ import { membership } from '@/lib/auth';
 import { buildPlan, estimate, Plan, timeScenes, policyCheck } from '@/lib/director';
 import { briefOf, snapshot } from '@/lib/production';
 import { voiceLive, videoLive } from '@/lib/providers';
-import { ASPECTS } from '@/lib/plans';
+import { ASPECTS, VOICES } from '@/lib/plans';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -41,6 +41,12 @@ export const PATCH = (req: Request, { params }: Ctx) => withUser(req, async (use
       }
       const built = await buildPlan(brief, t || null);
       return save({ chosen: t?.key || 'original', plan: built.plan, plan_source: built.source, title: built.plan.title, status: 'planned', versions: p.plan ? snapshot(p, 'Before new direction') : [] });
+    }
+    case 'voice': { // choose the narrator; picture is untouched, narration is re-recorded
+      if (!plan || !VOICES.includes(b.preset)) return fail(400, 'Choose a narrator voice from the list.');
+      (plan as any).voice_preset = b.preset;
+      plan.scenes.forEach((s: any) => { s.voice_url = null; s.voice_job = null; s.voice_failed = false; });
+      return save({ plan });
     }
     case 'rename': return save({ title: clean(b.title, 120) || p.title, folder: clean(b.folder ?? p.folder, 60) });
     case 'scene': { // manual scene edit (Professional Studio)
