@@ -2,7 +2,7 @@ import { ok, fail, withUser, clean } from '@/lib/http';
 import { db, now, audit } from '@/lib/store';
 import { membership } from '@/lib/auth';
 import { STYLES, ASPECTS } from '@/lib/plans';
-import { policyCheck, treatments, buildPlan, subjectOf } from '@/lib/director';
+import { policyCheck, treatments, buildPlan, subjectOf, autoDuration } from '@/lib/director';
 import { briefOf } from '@/lib/production';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,8 @@ export const POST = (req: Request) => withUser(req, async (user, b) => {
   if (prompt.length < 8) return fail(400, 'Describe your idea in a sentence or two.');
   const check = policyCheck(prompt); if (!check.ok) return fail(422, check.reason!);
   const plan = membership(user).plan!;
-  const duration = Math.max(9, Math.min(180, Math.round(+b.duration || 30)));
+  const category0 = clean(b.category, 60);
+  const duration = +b.duration === 0 ? autoDuration(prompt, category0, plan.maxSeconds) : Math.max(9, Math.min(180, Math.round(+b.duration || 30))); // 0 means "let the director decide"
   if (duration > plan.maxSeconds) return fail(402, `${plan.name} productions run up to ${plan.maxSeconds} seconds. Choose a shorter length or upgrade.`, { needsPlan: true });
   const base: any = {
     user_id: user.id, kind: 'production', prompt, style: STYLES.includes(b.style) ? b.style : 'Cinematic', duration,
