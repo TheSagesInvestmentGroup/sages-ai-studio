@@ -9,7 +9,7 @@ export const POST = (req: Request) => withUser(req, async (user, b) => {
   const plan = membership(user).plan!; if (!plan.bio.enabled) return fail(402, 'The Bio & Résumé Studio is not part of your membership.', { needsPlan: true });
   if (!b.confirmed) return fail(400, 'Review your career facts and confirm they are accurate before we write the script.');
   const f = b.facts || {};
-  const facts: Facts = { name: S(f.name, 80), headline: S(f.headline, 140), summary: S(f.summary, 600), roles: (Array.isArray(f.roles) ? f.roles : []).slice(0, 12).map((r: any) => ({ title: S(r?.title, 100), company: S(r?.company, 100), dates: S(r?.dates, 40), highlights: A(r?.highlights, 5) })), education: A(f.education), credentials: A(f.credentials), skills: A(f.skills, 20, 40) };
+  const facts: Facts = { name: S(f.name, 80), headline: S(f.headline, 140), summary: S(f.summary, 600), roles: (Array.isArray(f.roles) ? f.roles : []).slice(0, 20).map((r: any) => ({ title: S(r?.title, 100), company: S(r?.company, 100), dates: S(r?.dates, 40), highlights: A(r?.highlights, 15, 400) })), education: A(f.education, 20), credentials: A(f.credentials, 30), skills: A(f.skills, 20, 40) };
   if (!facts.name) return fail(400, 'Add your name.');
   const o = b.options || {};
   const seconds = Math.max(20, Math.min(plan.bio.maxSeconds, Math.round(+o.seconds || 60)));
