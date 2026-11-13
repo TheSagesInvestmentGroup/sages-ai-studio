@@ -39,6 +39,12 @@ export default async function Home() {
         </div>
       </section>
 
+      <section className="wrap" aria-label="The Sages AI Studio in pictures" style={{ paddingTop: 28 }}>
+        <div className="gallery">
+          {[['studio-1-brand', 'The Sages AI Studio. Create, innovate, empower.'], ['studio-2-intelligence', 'Intelligence that inspires.'], ['studio-3-powerhouse', 'Your personal AI powerhouse.'], ['studio-4-ideas', 'Dream, plan, achieve.'], ['studio-5-tomorrow', 'A smarter, more empowered tomorrow.']].map(([f, alt]) => <img key={f} src={`/brand/${f}.jpg`} alt={alt} loading="lazy" width={630} height={1022} />)}
+        </div>
+      </section>
+
       {show && (
         <section className="section" style={{ paddingBottom: 0 }}>
           <div className="wrap stack" style={{ maxWidth: 940 }}>
