@@ -54,6 +54,20 @@ export function timeScenes(duration: number, count: number): number[] {
   return secs;
 }
 
+/** A scene must last long enough to say its narration (about 2.5 words a second, clips run 3 to 10 seconds). */
+export const secondsToSay = (text?: string | null) => { const w = (text || '').trim().split(/\s+/).filter(Boolean).length; return w ? Math.min(10, Math.ceil(w / 2.5) + 1) : 3; };
+/** Lengthen any scene whose narration would otherwise be cut off. Cost follows length, so the estimate updates with it. */
+export function fitScenes<T extends { seconds: number; narration?: string | null }>(scenes: T[]): T[] { for (const s of scenes) s.seconds = Math.max(s.seconds, secondsToSay(s.narration)); return scenes; }
+
+/** "Automatic" length: sized to the kind of production and how much the idea describes, within the member's limit. */
+export function autoDuration(prompt: string, category: string | undefined, cap: number): number {
+  const words = prompt.trim().split(/\s+/).length, kind = (category || '') + ' ' + prompt;
+  let d = /reel|teaser|trailer|commercial|advert|\bad\b|promo|product demo/i.test(kind) ? 30 : /music video|documentary|educational|short film|movie|training|musical|play/i.test(kind) ? 90 : 45;
+  d += Math.floor(words / 60) * 30; // a detailed idea needs more room
+  const steps = [15, 30, 60, 90, 120, 180];
+  return Math.min(cap, steps.find(s => s >= d) || 180);
+}
+
 // ---------- treatments ----------
 const GENRE: Record<string, { name: string; twist: string }> = {
   'Sci-Fi': { name: 'Science Fiction Adventure', twist: 'an unfolding mystery with a discovery nobody expected' },
@@ -156,6 +170,7 @@ export async function buildPlan(b: Brief, t: Treatment | null): Promise<{ plan: 
   if (j && Array.isArray(j.scenes) && j.scenes.length >= 2) {
     const scenes = base.scenes.map((s, i) => { const x = j.scenes[i]; return x ? { ...s, title: String(x.title || s.title), visual: String(x.visual || s.visual), camera: String(x.camera || s.camera), lighting: String(x.lighting || s.lighting), narration: String(x.narration ?? s.narration), onscreen: String(x.onscreen ?? ''), sound: String(x.sound || s.sound), music: String(x.music || s.music) } : s; });
     const plan: Plan = { ...base, title: String(j.title || base.title), logline: String(j.logline || base.logline), tone: String(j.tone || base.tone), audience: String(j.audience || base.audience), arc: { ...base.arc, ...(j.arc || {}) }, music_direction: String(j.music_direction || base.music_direction), voice: String(j.voice || base.voice), cta: String(j.cta || base.cta), scenes };
+    fitScenes(plan.scenes); // the writer's lines decide the final scene lengths
     plan.master_prompt = masterPrompt(plan, b);
     return { plan, source: 'ai' };
   }
@@ -246,6 +261,7 @@ export async function applyEdit(plan: Plan, instruction: string, sceneId?: strin
       for (const k of ['title', 'visual', 'camera', 'lighting', 'narration', 'onscreen', 'sound', 'music'] as const) if (typeof x[k] === 'string') (s as any)[k] = x[k];
       if (Number.isFinite(+x.seconds)) s.seconds = Math.max(3, Math.min(10, Math.round(+x.seconds)));
     }
+    fitScenes(p.scenes);
     return { plan: p, changed: settle(plan, p), reply: j.reply, source: 'ai' };
   }
   return { ...builtinEdit(plan, instruction, sceneId), source: 'builtin' };
