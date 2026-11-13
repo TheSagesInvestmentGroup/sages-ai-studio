@@ -9,14 +9,14 @@ async function fetchT(url: string, init: RequestInit, ms = 20000) {
 }
 
 // ---------- language (OpenAI-compatible chat completions, with failover) ----------
-export async function llmJSON(system: string, user: string): Promise<any | null> {
+export async function llmJSON(system: string, user: string, ms = 24000): Promise<any | null> {
   for (const p of llmProviders()) {
     try {
       const r = await fetchT(`${p.base.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${p.key}` },
         body: JSON.stringify({ model: p.model, temperature: 0.8, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system + '\nReply with one JSON object only.' }, { role: 'user', content: user }] }),
-      }, 24000);
+      }, ms);
       if (!r.ok) { console.error('[llm]', p.name, r.status); continue; }
       const j = await r.json();
       const text: string = j?.choices?.[0]?.message?.content || '';
