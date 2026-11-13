@@ -53,6 +53,7 @@ export const db = {
   },
   async get(table: Table, id: string): Promise<Row | null> {
     if (isDemo) { const r = (mem()[table] || []).find(r => r.id === id); return r ? structuredClone(r) : null; }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))) return null; // not a record id: "not found", not a server error
     const { data, error } = await admin().from(table).select('*').eq('id', id).maybeSingle();
     if (error) throw new Error(error.message);
     return data;
