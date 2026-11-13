@@ -1,10 +1,11 @@
 import { toSrt } from '../lib/srt';
 import { mergeFacts } from '../lib/career';
+import { fitScenes, autoDuration } from '../lib/director';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { timeScenes, sceneCount, builtinTreatments, builtinPlan, builtinEdit, estimate, policyCheck, subjectOf } from '../lib/director';
 import { parseResume, careerPlan } from '../lib/career';
-import { PLANS, sceneCost, COST, PROVIDER_COST_PER_SECOND_USD } from '../lib/plans';
+import { PLANS, sceneCost, COST, PROVIDER_COST_PER_SECOND_USD, PROVIDER, creditFloorUsd, PACKS } from '../lib/plans';
 
 const brief = { prompt: 'Create a video of a futuristic city with flying cars.', style: 'Sci-Fi', duration: 30, aspect: '16:9' };
 
@@ -99,7 +100,7 @@ test('résumé parser reorganises without inventing', () => {
 test('career script uses only approved facts', () => {
   const f = parseResume(RESUME), p = careerPlan(f, { style: 'Executive', person: 'first', structure: 'chronological', seconds: 60, maxScenes: 5, kind: 'Video résumé' });
   for (const s of p.scenes) { assert.ok(s.seconds >= 4 && s.seconds <= 10); assert.ok(s.narration.split(/\s+/).length <= s.seconds * 2.6 + 1, `scene ${s.n} narration must fit its ${s.seconds} seconds`); }
-  assert.ok(p.scenes.reduce((a, s) => a + s.seconds, 0) >= Math.min(60, p.scenes.length * 10) - 1, 'spare time is shared out');
+  assert.ok(p.scenes.reduce((a, s) => a + s.seconds, 0) <= 60, 'stays within the chosen length');
   const said = p.scenes.map(s => s.narration).join(' ');
   assert.match(said, /Harbor National Bank/); assert.match(said, /Northwind Financial/); assert.match(said, /CISSP/);
   const known = RESUME + ' Hello I’m I’d welcome the chance to talk about how can contribute Thank you for your time As at from to Today From serve role have held since was My credentials include';
@@ -129,4 +130,37 @@ test('career narration fits its scene and skips section headings', () => {
   for (const s of p.scenes) assert.ok(s.narration.split(/\s+/).length <= 24, `"${s.narration}" is too long to say in one scene`);
   const role = p.scenes.find(s => s.beat === 'Role')!; assert.equal(role.narration, 'From November 2019 to September 2023 I was Lead Control Officer at First Bank.');
   const cred = p.scenes.find(s => s.beat === 'Credentials')!; assert.equal(cred.narration, 'My credentials include State University, BS Finance; CISA.');
+});
+
+test('career script sizes itself to the résumé and never drops words from what it tells', () => {
+  const long = 'Enterprise function lead responsible for the design, build-out and continuous monitoring of a control framework spanning forty-two business units, three regulators and a programme of quarterly attestations.';
+  const role = (n: number) => ({ title: `Manager ${n}`, company: `Bank ${n}`, dates: `${2010 + n} - ${2011 + n}`, highlights: [long, `Second point for bank ${n}.`] });
+  const f = { name: 'Sam Rivera', headline: 'Executive', summary: '', roles: [4, 3, 2, 1].map(role), education: [], credentials: [], skills: [] };
+  const opt = { style: 'Executive', person: 'first' as const, structure: 'chronological' as const, maxScenes: 75, kind: 'Video résumé' };
+  const short = careerPlan(f, { ...opt, seconds: 60 }), full = careerPlan(f, { ...opt, seconds: 300 });
+  const total = (p: any) => p.scenes.reduce((a: number, s: any) => a + s.seconds, 0);
+  assert.ok(total(short) <= 60); assert.ok(total(full) <= 300); assert.ok(full.scenes.length > short.scenes.length, 'a longer limit tells more');
+  assert.equal(short.scenes.filter(s => s.beat === 'Role').length, 4, 'every position is named even in a short video');
+  for (const s of full.scenes) assert.ok(s.narration.split(/\s+/).length <= 24 && s.seconds <= 10);
+  const said = full.scenes.filter(s => s.beat === 'Achievement').map(s => s.narration).join(' ');
+  for (const n of [1, 2, 3, 4]) assert.ok(said.includes(`Second point for bank ${n}.`));
+  assert.equal(said.split(long.split(' ').slice(-3).join(' ')).length - 1, 4, 'each long accomplishment is told to its last words');
+  const brief = careerPlan({ ...f, roles: [role(1)] }, { ...opt, seconds: 300 }); assert.ok(total(brief) < 80, 'a short career makes a short video');
+});
+
+test('every price keeps its margin over the provider cost', () => {
+  const credit = creditFloorUsd(), margin = (price: number, cost: number) => 1 - cost / price;
+  assert.ok(margin(COST.videoPerSecond * credit, PROVIDER.videoPerSecond + PROVIDER.startImage / 3) >= 0.5, 'video on the main model keeps at least half');
+  assert.ok(margin(COST.videoPerSecond * credit, PROVIDER.backupVideoPerSecond) >= 0.3, 'video on the backup model still earns');
+  assert.ok(margin(COST.voicePerScene * credit, PROVIDER.voicePerScene) >= 0.5, 'narration keeps at least half');
+  for (const p of PACKS) assert.ok(p.price / p.credits >= Math.max(...PLANS.map(x => x.price / x.credits)), 'packs never undercut a membership');
+});
+
+test('scenes stretch to fit their narration and automatic length follows the idea', () => {
+  const s = fitScenes([{ seconds: 4, narration: 'word '.repeat(20) }, { seconds: 8, narration: 'Short line.' }, { seconds: 3, narration: '' }]);
+  assert.deepEqual(s.map(x => x.seconds), [9, 8, 3]);
+  assert.equal(autoDuration('A quick teaser for my bakery', '', 180), 30);
+  assert.equal(autoDuration('A short film about a lighthouse keeper', '', 180), 90);
+  assert.equal(autoDuration('A short film about a lighthouse keeper', '', 60), 60, 'never beyond the plan limit');
+  assert.ok(autoDuration('word '.repeat(130) + 'documentary', '', 180) > 90, 'a detailed idea gets more room');
 });
