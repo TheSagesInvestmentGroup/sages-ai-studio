@@ -4,11 +4,12 @@ import { PLANS } from '@/lib/plans';
 import { api } from '@/lib/client';
 
 export default function PlanGrid({ signedIn, current, demo }: { signedIn: boolean; current?: string | null; demo: boolean }) {
-  const [busy, setBusy] = useState(''), [err, setErr] = useState('');
+  const [busy, setBusy] = useState(''), [err, setErr] = useState(''), [ask, setAsk] = useState('');
   async function choose(tier: string) {
     if (!signedIn) { location.href = `/signup?plan=${tier}`; return; }
+    if (current && !demo && ask !== tier) { setAsk(tier); return; } // members confirm before their saved payment method is charged
     setBusy(tier); setErr('');
-    try { const r = await api('/api/billing/checkout', 'POST', { tier }); location.href = r.url || '/studio/billing?welcome=1'; }
+    try { const r = await api('/api/billing/checkout', 'POST', { tier, confirm: true }); location.href = r.url || '/studio/billing?welcome=1'; }
     catch (e: any) { setErr(e.message); setBusy(''); }
   }
   return (
@@ -22,7 +23,8 @@ export default function PlanGrid({ signedIn, current, demo }: { signedIn: boolea
             <p className="muted small">{p.blurb}</p>
             <ul className="ticks">{p.benefits.map(b => <li key={b}>{b}</li>)}<li>{p.credits.toLocaleString()} rendering credits each month</li></ul>
             <div className="grow" />
-            <button className={`btn block ${p.id === 'professional' ? 'primary' : ''}`} id={`choose-${p.id}`} disabled={!!busy || p.id === current} onClick={() => choose(p.id)}>{busy === p.id ? <span className="spin" /> : p.id === current ? 'Current plan' : current ? `Switch to ${p.name}` : `Choose ${p.name}`}</button>
+            <button className={`btn block ${p.id === 'professional' ? 'primary' : ''}`} id={`choose-${p.id}`} disabled={!!busy || p.id === current} onClick={() => choose(p.id)}>{busy === p.id ? <span className="spin" /> : p.id === current ? 'Current plan' : ask === p.id ? `Confirm: $${p.price} a month` : current ? `Switch to ${p.name}` : `Choose ${p.name}`}</button>
+            {ask === p.id && <p className="small muted">Your saved payment method is charged the difference for the rest of this month now, then ${p.price} each month. <button className="chip" onClick={() => setAsk('')}>Keep my current plan</button></p>}
           </div>
         ))}
       </div>
