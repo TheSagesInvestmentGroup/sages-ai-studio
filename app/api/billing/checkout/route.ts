@@ -15,9 +15,12 @@ export const POST = (req: Request) => withUser(req, async (user, b) => {
   }
   const price = priceId(plan.id); if (!price) return fail(503, 'This membership is not available yet.');
   const s = stripe();
-  if (user.stripe_subscription_id && user.status === 'active') { // existing member: change plan in the billing portal
-    const portal = await s.billingPortal.sessions.create({ customer: user.stripe_customer_id, return_url: `${cfg.siteUrl}/studio/billing` });
-    return ok({ url: portal.url });
+  if (user.stripe_subscription_id && user.status === 'active') { // existing member: switch plan on the same subscription
+    if (!b.confirm) return fail(400, 'Confirm the plan change first.');
+    const sub = await s.subscriptions.retrieve(user.stripe_subscription_id);
+    await s.subscriptions.update(sub.id, { items: [{ id: sub.items.data[0].id, price }], proration_behavior: 'always_invoice', metadata: { user_id: user.id, tier: plan.id } });
+    await audit(user.id, 'billing.switch', { tier: plan.id });
+    return ok({ url: `${cfg.siteUrl}/studio/billing?changed=1` });
   }
   let customer = user.stripe_customer_id;
   if (!customer) { customer = (await s.customers.create({ email: user.email, name: user.name, metadata: { user_id: user.id } })).id; await db.update('profiles', user.id, { stripe_customer_id: customer }); }
