@@ -57,16 +57,19 @@ async function rwSubmit(path: string, body: any): Promise<{ id?: string; error?:
   } catch { return { error: 'The media service did not respond.' }; }
 }
 
-export const videoSubmit = (prompt: string, aspect: string, seconds: number) =>
-  rwSubmit('/v1/text_to_video', { model: cfg.runwayModel, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
+/** The backup video model, or null when none is set or it equals the main one. */
+export const fallbackModel = () => (cfg.runwayFallbackModel && cfg.runwayFallbackModel !== 'none' && cfg.runwayFallbackModel !== cfg.runwayModel ? cfg.runwayFallbackModel : null);
+
+export const videoSubmit = (prompt: string, aspect: string, seconds: number, model = cfg.runwayModel) =>
+  rwSubmit('/v1/text_to_video', { model, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
 
 /** Narrator: a Runway preset name, or "custom:<id>" for a member's own cloned voice. */
 export const voiceSubmit = (text: string, voice?: string) =>
   rwSubmit('/v1/text_to_speech', { model: cfg.runwayVoiceModel, promptText: text.slice(0, 2000), voice: voice?.startsWith('custom:') ? { type: 'custom', id: voice.slice(7) } : { type: 'runway-preset', presetId: voice || cfg.runwayVoice } });
 
 /** Scene that starts from a member's uploaded image. */
-export const imageVideoSubmit = (prompt: string, imageUrl: string, aspect: string, seconds: number) =>
-  rwSubmit('/v1/image_to_video', { model: cfg.runwayModel, promptImage: imageUrl, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
+export const imageVideoSubmit = (prompt: string, imageUrl: string, aspect: string, seconds: number, model = cfg.runwayModel) =>
+  rwSubmit('/v1/image_to_video', { model, promptImage: imageUrl, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
 
 /** Instrumental soundtrack for a whole production. */
 export const musicSubmit = (prompt: string, seconds: number) =>
@@ -103,6 +106,38 @@ export async function videoStatus(id: string): Promise<{ state: 'working' | 'don
     if (j.status === 'FAILED' || j.status === 'CANCELLED') return { state: 'failed', error: j.failure || 'The media service could not complete this scene.' };
     return { state: 'working' };
   } catch { return { state: 'working' }; }
+}
+
+/** Stop a task that is no longer wanted. */
+export async function taskCancel(id: string) { try { await fetchT(`${RW}/v1/tasks/${encodeURIComponent(id)}`, { method: 'DELETE', headers: rwHeaders() }, 10000); } catch { /* best effort */ } }
+
+// ---------- social publishing (Postiz public API) ----------
+const PZ = 'https://api.postiz.com/public/v1';
+export const publishLive = () => !!cfg.postizKey;
+// Channels that accept a text post with a link. Video-only networks need the exported file.
+const TEXT_CHANNELS = ['x', 'linkedin', 'linkedin-page', 'facebook', 'threads', 'bluesky', 'mastodon', 'telegram', 'discord', 'slack'];
+export interface Channel { id: string; name: string; network: string; ok: boolean }
+
+export async function postizChannels(): Promise<{ channels?: Channel[]; error?: string }> {
+  try {
+    const r = await fetchT(`${PZ}/integrations`, { headers: { Authorization: cfg.postizKey } }, 12000);
+    if (!r.ok) return { error: r.status === 401 || r.status === 403 ? 'Postiz did not accept the key.' : `Postiz did not respond (${r.status}).` };
+    const j = await r.json();
+    const list: any[] = Array.isArray(j) ? j : j?.integrations || [];
+    return { channels: list.filter(i => !i.disabled).map(i => ({ id: String(i.id), name: String(i.name || i.profile || i.identifier), network: String(i.identifier), ok: TEXT_CHANNELS.includes(String(i.identifier)) })) };
+  } catch { return { error: 'Postiz did not respond.' }; }
+}
+
+export async function postizPublish(channels: Channel[], content: string, at?: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const r = await fetchT(`${PZ}/posts`, {
+      method: 'POST', headers: { Authorization: cfg.postizKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: at ? 'schedule' : 'now', date: at || new Date().toISOString(), shortLink: false, tags: [], posts: channels.map(c => ({ integration: { id: c.id }, value: [{ content, image: [] }], settings: { __type: c.network } })) }),
+    }, 20000);
+    if (r.ok) return { ok: true };
+    const j = await r.json().catch(() => ({}));
+    return { ok: false, error: r.status === 429 ? 'Postiz is busy. Try again in a few minutes.' : (typeof j?.message === 'string' && j.message) || `Postiz refused the post (${r.status}).` };
+  } catch { return { ok: false, error: 'Postiz did not respond.' }; }
 }
 
 // ---------- email (Resend) ----------
