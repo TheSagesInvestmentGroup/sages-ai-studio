@@ -13,7 +13,7 @@ export const GET = (req: Request) => withUser(req, async user => {
   const ledger = new URL(req.url).searchParams.get('ledger') ? await db.list('credit_ledger', { user_id: user.id }, { order: 'created_at', limit: 25 }) : undefined;
   return ok({
     ledger,
-    user: { id: user.id, email: user.email, name: user.name, interests: user.interests || [], onboarded: !!user.onboarded, tier: user.tier, status: user.status, credits: user.credits, videos_used: user.videos_used, period_end: user.period_end },
+    user: { id: user.id, email: user.email, name: user.name, interests: user.interests || [], onboarded: !!user.onboarded, tier: user.tier, status: user.status, credits: user.credits, pack_credits: user.pack_credits || 0, videos_used: user.videos_used, period_end: user.period_end },
     member: m.active, plan: m.plan, owner: isOwner(user), demo: isDemo,
     engines: { video: videoLive(), voice: voiceLive(), writer: llmProviders().length > 0, payments: !!cfg.stripeKey },
   });
