@@ -4,7 +4,7 @@ import { isOwner, addCredits, activateTier } from '@/lib/auth';
 import { cfg, providerStatus } from '@/lib/config';
 import { PLANS, planOf } from '@/lib/plans';
 import { stripe } from '@/lib/billing';
-import { sendEmail } from '@/lib/providers';
+import { sendEmail, videoSubmit, fallbackModel, taskCancel } from '@/lib/providers';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +41,12 @@ export const POST = (req: Request) => withUser(req, async (user, b) => {
       if (b.cancel && target.stripe_subscription_id) await stripe().subscriptions.cancel(target.stripe_subscription_id);
       await audit(user.id, 'admin.refund', { member: target.id, charge: charge.id, amount: charge.amount });
       return ok({ refunded: charge.amount / 100 });
+    }
+    case 'probeBackup': { // owner check: does the backup video model accept a request? The test clip is cancelled at once.
+      const m = fallbackModel(); if (!m) return fail(400, 'No backup model is set.');
+      const r = await videoSubmit('A calm sunrise over a quiet sea, slow camera move.', '16:9', 3, m);
+      if (r.id) await taskCancel(r.id);
+      return ok({ model: m, accepted: !!r.id, error: r.error });
     }
     case 'reply': {
       const t = await db.get('tickets', String(b.ticketId)); if (!t) return fail(404, 'Ticket not found.');
