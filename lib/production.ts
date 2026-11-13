@@ -83,7 +83,7 @@ export async function poll(project: Row) {
         } else if (st.state === 'failed') { vs.voice_job = null; vs.voice_failed = true; dirty = true; }
       } else if (!vs.voice_failed && voiced < 3) {
         voiced++;
-        const r = await voiceSubmit(sc.narration);
+        const r = await voiceSubmit(sc.narration, (plan as any).voice_preset);
         if (r.id) { vs.voice_job = r.id; dirty = true; } else { vs.voice_failed = true; dirty = true; }
       }
     }
