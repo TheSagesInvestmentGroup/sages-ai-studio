@@ -5,7 +5,7 @@ import { isDemo } from './config';
 import { spendCredits, addCredits, membership } from './auth';
 import { sceneCost } from './plans';
 import { Plan, Scene, scenePrompt, Brief } from './director';
-import { videoLive, videoSubmit, videoStatus, voiceLive, voiceSubmit, imageVideoSubmit, avatarVideoSubmit } from './providers';
+import { videoLive, videoSubmit, videoStatus, voiceLive, voiceSubmit, imageVideoSubmit, avatarVideoSubmit, fallbackModel } from './providers';
 import { signedUrl } from './files';
 
 export async function briefOf(project: Row): Promise<Brief> {
@@ -26,6 +26,13 @@ async function saveRender(path: string, data: ArrayBuffer | Buffer, type: string
     if (error) return null;
     return admin().storage.from('renders').getPublicUrl(path).data.publicUrl;
   } catch { return null; }
+}
+
+/** Send one scene to the video service, on the main model or a named one. */
+async function submitScene(project: Row, plan: Plan, sc: Scene, brief: Brief, model?: string) {
+  const x = sc as any; let ref: string | null = null;
+  if (x.ref_asset && !isDemo) { const a = await db.get('assets', x.ref_asset); if (a && a.user_id === project.user_id && a.kind === 'image' && a.ready) ref = await signedUrl(a.path, 3600); }
+  return ref ? imageVideoSubmit(scenePrompt(plan, sc, brief), ref, project.aspect, sc.seconds, model) : videoSubmit(scenePrompt(plan, sc, brief), project.aspect, sc.seconds, model);
 }
 
 export async function produce(user: Row, project: Row, sceneIds?: string[]) {
@@ -51,9 +58,9 @@ export async function produce(user: Row, project: Row, sceneIds?: string[]) {
       Object.assign(sc, { status: 'rendering', job_id: null, error: null, cost, voice_failed: false });
       charged += cost; continue;
     }
-    let ref: string | null = null;
-    if (x.ref_asset && !isDemo) { const a = await db.get('assets', x.ref_asset); if (a && a.user_id === user.id && a.kind === 'image' && a.ready) ref = await signedUrl(a.path, 3600); }
-    const r = ref ? await imageVideoSubmit(scenePrompt(plan, sc, brief), ref, project.aspect, sc.seconds) : await videoSubmit(scenePrompt(plan, sc, brief), project.aspect, sc.seconds);
+    x.backup_used = false;
+    let r = await submitScene(project, plan, sc, brief);
+    if ((r.error || !r.id) && fallbackModel()) { r = await submitScene(project, plan, sc, brief, fallbackModel()!); x.backup_used = true; } // main model refused: try the backup
     if (r.error || !r.id) { await addCredits(user.id, cost, `Refund: scene ${sc.n} was not accepted`, { project: project.id }); sc.status = 'failed'; sc.error = r.error || 'Not accepted'; problems.push(`Scene ${sc.n}: ${sc.error}`); continue; }
     Object.assign(sc, { status: 'rendering', job_id: r.id, error: null, cost });
     charged += cost;
@@ -74,6 +81,13 @@ export async function poll(project: Row) {
         let url = st.url;
         try { const r = await fetch(st.url); if (r.ok) url = (await saveRender(`${project.id}/${sc.id}-${Date.now()}.mp4`, await r.arrayBuffer(), 'video/mp4')) || st.url; } catch { /* keep provider URL */ }
         Object.assign(sc, { status: 'ready', clip_url: url, job_id: null }); dirty = true;
+      } else if (st.state === 'failed' && !(sc as any).avatar_id && !(sc as any).backup_used && fallbackModel()) {
+        // The main model gave up on this scene: try once more on the backup before refunding.
+        (sc as any).backup_used = true;
+        const r = await submitScene(project, plan, sc, await briefOf(project), fallbackModel()!);
+        if (r.id) sc.job_id = r.id;
+        else { if (sc.cost) await addCredits(project.user_id, sc.cost, `Refund: scene ${sc.n} failed to render`, { project: project.id }); Object.assign(sc, { status: 'failed', error: st.error, job_id: null, cost: 0 }); }
+        dirty = true;
       } else if (st.state === 'failed') {
         if (sc.cost) await addCredits(project.user_id, sc.cost, `Refund: scene ${sc.n} failed to render`, { project: project.id });
         Object.assign(sc, { status: 'failed', error: st.error, job_id: null, cost: 0 }); dirty = true;
