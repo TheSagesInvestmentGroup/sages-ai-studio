@@ -92,3 +92,11 @@ footer.site { border-top: 1px solid var(--line-soft); padding-block: 28px; color
 .bio-wrap { display: grid; grid-template-columns: minmax(0, 860px) minmax(0, 280px); gap: 24px; align-items: start; }
 .bio-art { position: sticky; top: 84px; }
 @media (max-width: 1080px) { .bio-wrap { grid-template-columns: minmax(0, 1fr); } .bio-art { display: none; } }
+
+/* Crew section: the picture keeps its full frame and true proportions (never cropped or stretched). It sets the
+   height of the row; the text beside it spreads out to match, from "Your crew" at the top to the last line at the bottom. */
+.wrap.crew { max-width: 1560px; display: grid; grid-template-columns: minmax(0, 2.05fr) minmax(0, 1fr); gap: 44px; align-items: stretch; }
+.crew img { width: 100%; height: auto; align-self: start; border-radius: 16px; border: 1px solid var(--line); display: block; }
+.crew-copy { display: flex; flex-direction: column; justify-content: space-between; gap: 20px; }
+.crew-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; flex: 1; align-content: space-between; }
+@media (max-width: 1320px) { .wrap.crew { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
