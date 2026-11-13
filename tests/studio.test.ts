@@ -98,7 +98,8 @@ test('résumé parser reorganises without inventing', () => {
 
 test('career script uses only approved facts', () => {
   const f = parseResume(RESUME), p = careerPlan(f, { style: 'Executive', person: 'first', structure: 'chronological', seconds: 60, maxScenes: 5, kind: 'Video résumé' });
-  assert.equal(p.scenes.reduce((a, s) => a + s.seconds, 0), Math.min(60, p.scenes.length * 10)); // scenes are capped at 10 seconds each
+  for (const s of p.scenes) { assert.ok(s.seconds >= 4 && s.seconds <= 10); assert.ok(s.narration.split(/\s+/).length <= s.seconds * 2.6 + 1, `scene ${s.n} narration must fit its ${s.seconds} seconds`); }
+  assert.ok(p.scenes.reduce((a, s) => a + s.seconds, 0) >= Math.min(60, p.scenes.length * 10) - 1, 'spare time is shared out');
   const said = p.scenes.map(s => s.narration).join(' ');
   assert.match(said, /Harbor National Bank/); assert.match(said, /Northwind Financial/); assert.match(said, /CISSP/);
   const known = RESUME + ' Hello I’m I’d welcome the chance to talk about how can contribute Thank you for your time As at from to Today From serve role have held since was My credentials include';
@@ -119,4 +120,13 @@ test('résumé merge keeps positions and bullets the AI reader dropped', () => {
   const m = mergeFacts(ai, base);
   assert.equal(m.roles.length, 2); assert.equal(m.roles[0].highlights.length, 2); assert.equal(m.roles[1].company, 'Northwind Financial');
   assert.equal(mergeFacts(base, base).roles.length, 2, 'nothing is duplicated when both readers agree');
+});
+
+test('career narration fits its scene and skips section headings', () => {
+  const long = 'Enterprise function lead responsible for the design, build-out and continuous monitoring of a control framework spanning forty-two business units, three regulators and a programme of quarterly attestations.';
+  const f = { name: 'Sam Rivera', headline: 'Senior Data Risk Executive', summary: 'With over 25 years of experience within the financial services industry across risk, data, privacy, compliance, audit and regulatory reporting disciplines at five national banks.', roles: [{ title: 'Lead Control Officer', company: 'First Bank', dates: 'November 2019 – September 2023', highlights: [long] }], education: ['Education', 'State University, BS Finance'], credentials: ['Certifications:', 'CISA'], skills: [] };
+  const p = careerPlan(f, { style: 'Executive', person: 'first', structure: 'chronological', seconds: 60, maxScenes: 7, kind: 'Video résumé' });
+  for (const s of p.scenes) assert.ok(s.narration.split(/\s+/).length <= 24, `"${s.narration}" is too long to say in one scene`);
+  const role = p.scenes.find(s => s.beat === 'Role')!; assert.equal(role.narration, 'From November 2019 to September 2023 I was Lead Control Officer at First Bank.');
+  const cred = p.scenes.find(s => s.beat === 'Credentials')!; assert.equal(cred.narration, 'My credentials include State University, BS Finance; CISA.');
 });
