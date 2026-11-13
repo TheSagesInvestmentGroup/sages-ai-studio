@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { cfg } from '@/lib/config';
 import { db, audit } from '@/lib/store';
-import { activateTier } from '@/lib/auth';
+import { activateTier, addPack } from '@/lib/auth';
 import { stripe, tierOfPrice } from '@/lib/billing';
-import { planOf } from '@/lib/plans';
+import { planOf, packOf } from '@/lib/plans';
 
 export const dynamic = 'force-dynamic';
 const byCustomer = async (id: any) => (typeof id === 'string' ? (await db.list('profiles', { stripe_customer_id: id }))[0] : null);
@@ -18,6 +18,13 @@ export async function POST(req: Request) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const uid = o.client_reference_id || o.metadata?.user_id, tier = o.metadata?.tier;
+        if (o.mode === 'payment') { // a pack of extra credits, paid once
+          const pack = packOf(o.metadata?.pack), p = uid ? await db.get('profiles', uid) : null;
+          if (!pack || !p || o.payment_status !== 'paid' || p.last_event === event.id) break;
+          await addPack(p.id, pack.credits, { session: o.id, pack: pack.id });
+          await db.update('profiles', p.id, { last_event: event.id, stripe_customer_id: p.stripe_customer_id || o.customer });
+          break;
+        }
         if (uid && planOf(tier)) await activateTier(uid, tier, { stripe_customer_id: o.customer, stripe_subscription_id: o.subscription, last_event: event.id });
         break;
       }
@@ -41,7 +48,7 @@ export async function POST(req: Request) {
         break;
       }
       case 'customer.subscription.deleted': { // payment discontinued: access ends
-        const p = await byCustomer(o.customer); if (p) await db.update('profiles', p.id, { status: 'canceled', tier: null, credits: 0, stripe_subscription_id: null });
+        const p = await byCustomer(o.customer); if (p) await db.update('profiles', p.id, { status: 'canceled', tier: null, credits: 0, pack_credits: 0, stripe_subscription_id: null });
         break;
       }
     }
