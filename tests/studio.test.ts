@@ -1,3 +1,4 @@
+import { toSrt } from '../lib/srt';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { timeScenes, sceneCount, builtinTreatments, builtinPlan, builtinEdit, estimate, policyCheck, subjectOf } from '../lib/director';
@@ -102,4 +103,11 @@ test('career script uses only approved facts', () => {
   const known = RESUME + ' Hello I’m I’d welcome the chance to talk about how can contribute Thank you for your time As at from to built the experience rely on today My credentials include';
   for (const w of said.match(/\b[A-Z][a-z]{3,}\b/g) || []) assert.ok(known.includes(w), `"${w}" must come from the résumé or the fixed template`);
   assert.ok(p.scenes.indexOf(p.scenes.find(s => /Northwind/.test(s.narration))!) < p.scenes.indexOf(p.scenes.find(s => /Harbor/.test(s.narration))!), 'chronological: oldest role first');
+});
+
+test('subtitle file times captions from scene lengths', () => {
+  const srt = toSrt([{ seconds: 4, narration: 'First line.' }, { seconds: 3, narration: '' }, { seconds: 5, narration: 'Third scene speaks here.' }]);
+  assert.equal(srt, '1\n00:00:00,000 --> 00:00:04,000\nFirst line.\n\n2\n00:00:07,000 --> 00:00:12,000\nThird scene speaks here.\n');
+  const long = toSrt([{ seconds: 10, narration: 'word '.repeat(40) }]);
+  assert.equal(long.split('\n\n').length, 3); assert.match(long, /--> 00:00:10,000/);
 });
