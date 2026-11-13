@@ -1,5 +1,16 @@
 import Link from 'next/link';
 import { PLANS, CATEGORIES } from '@/lib/plans';
+import Player from '@/components/Player';
+import { db } from '@/lib/store';
+
+export const dynamic = 'force-dynamic';
+// A shared production chosen by the owner (FEATURED_SLUG) plays on the home page.
+async function featured() {
+  const slug = (process.env.FEATURED_SLUG || '').trim(); if (!slug) return null;
+  try { const [p] = await db.list('projects', { share_slug: slug }); if (!p?.shared || !p.plan) return null;
+    return { title: p.title, aspect: p.aspect, scenes: p.plan.scenes.map((s: any) => ({ id: s.id, n: s.n, beat: s.beat, title: s.title, seconds: s.seconds, visual: s.visual, camera: s.camera, narration: s.narration, onscreen: s.onscreen, clip_url: s.clip_url, voice_url: s.voice_url })) };
+  } catch { return null; }
+}
 
 const CREW = [
   ['Creative Director', 'Turns a sentence into three distinct creative treatments.'], ['Screenwriter', 'Writes the script, narration and scene breakdown.'],
@@ -13,7 +24,8 @@ const STEPS = [
   ['Publish it', 'Export for widescreen, vertical or square, and share it to your social channels.'],
 ];
 
-export default function Home() {
+export default async function Home() {
+  const show = await featured();
   return (
     <main>
       <section className="hero">
@@ -26,6 +38,15 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {show && (
+        <section className="section" style={{ paddingBottom: 0 }}>
+          <div className="wrap stack" style={{ maxWidth: 940 }}>
+            <div className="stack"><span className="eyebrow">Made in the studio</span><h2>From one sentence to this</h2></div>
+            <Player scenes={show.scenes} aspect={show.aspect} title={show.title} />
+          </div>
+        </section>
+      )}
 
       <section className="section" id="how">
         <div className="wrap stack-lg">
