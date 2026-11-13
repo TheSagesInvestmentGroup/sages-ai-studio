@@ -121,9 +121,18 @@ export async function addCredits(userId: string, amount: number, reason: string,
 /** Start or renew a paid month: reset the credit allowance and production count. */
 export async function activateTier(userId: string, tier: string, extra: Row = {}, periodEnd?: string) {
   const plan = planOf(tier); if (!plan) return;
+  // The monthly allowance is spent first, so whatever is left of purchased extra credits carries into the new month.
+  const before = await db.get('profiles', userId), carried = Math.max(0, Math.min(before?.credits || 0, before?.pack_credits || 0));
   await db.update('profiles', userId, {
-    tier, status: 'active', credits: plan.credits, videos_used: 0,
+    tier, status: 'active', credits: plan.credits + carried, pack_credits: carried, videos_used: 0,
     period_end: periodEnd || new Date(Date.now() + 31 * 864e5).toISOString(), ...extra,
   });
   await db.insert('credit_ledger', { user_id: userId, amount: plan.credits, reason: `Monthly allowance: ${plan.name}`, ref: { at: now() } });
+}
+
+/** Extra credits bought as a pack. They sit on top of the monthly allowance and carry over. */
+export async function addPack(userId: string, credits: number, extra: Row = {}) {
+  const p = await db.get('profiles', userId); if (!p) return;
+  await addCredits(userId, credits, `Extra credits purchased: ${credits.toLocaleString('en-US')}`, extra);
+  await db.update('profiles', userId, { pack_credits: (p.pack_credits || 0) + credits });
 }
