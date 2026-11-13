@@ -2,7 +2,7 @@ import { ok, fail, withUser, clean } from '@/lib/http';
 import { db, now, audit } from '@/lib/store';
 import { isOwner, addCredits, activateTier } from '@/lib/auth';
 import { cfg, providerStatus } from '@/lib/config';
-import { PLANS, planOf } from '@/lib/plans';
+import { PLANS, planOf, PROVIDER, COST, PACKS } from '@/lib/plans';
 import { stripe } from '@/lib/billing';
 import { sendEmail, videoSubmit, fallbackModel, taskCancel } from '@/lib/providers';
 
@@ -20,6 +20,9 @@ export const GET = (req: Request) => withUser(req, async user => {
       projects: projects.length, rendering: scenes.filter(s => s.status === 'rendering').length, failed: scenes.filter(s => s.status === 'failed').length,
       credits_spent: -ledger.filter(l => l.amount < 0).reduce((a, l) => a + l.amount, 0), credits_refunded: ledger.filter(l => /^Refund/.test(l.reason)).reduce((a, l) => a + l.amount, 0),
       escalated: tickets.filter(t => t.status === 'escalated').length,
+      // Estimate only: net credits used, at the provider's video rate. Narration and music are a small part of it.
+      provider_cost: Math.round((-ledger.filter(l => l.amount < 0).reduce((a, l) => a + l.amount, 0) - ledger.filter(l => /^Refund/.test(l.reason)).reduce((a, l) => a + l.amount, 0)) * (PROVIDER.videoPerSecond / COST.videoPerSecond) * 100) / 100,
+      pack_revenue: ledger.filter(l => /^Extra credits purchased/.test(l.reason)).reduce((a, l) => a + (PACKS.find(k => k.credits === l.amount)?.price || 0), 0),
     },
     members: profiles.map(p => ({ id: p.id, email: p.email, name: p.name, tier: p.tier, status: p.status, credits: p.credits, videos_used: p.videos_used, period_end: p.period_end, created_at: p.created_at, billing: !!p.stripe_customer_id })),
     failed: scenes.filter(s => s.status === 'failed').slice(0, 30).map(s => ({ project: s.project, n: s.n, error: s.error })),
