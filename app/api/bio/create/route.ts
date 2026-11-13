@@ -16,7 +16,7 @@ export const POST = (req: Request) => withUser(req, async (user, b) => {
   const attachments = A(b.attachments, plan.bio.attachments, 60);
   const mine = new Set((await db.list('assets', { user_id: user.id })).map(a => a.id));
   const kind = ['Video résumé', 'Professional biography', 'Executive introduction', 'Cover letter video'].includes(o.kind) ? o.kind : 'Video résumé';
-  const cp = careerPlan(facts, { style: ['Executive', 'Corporate', 'Cinematic', 'Conversational', 'Storytelling'].includes(o.style) ? o.style : 'Executive', person: o.person === 'third' ? 'third' : 'first', structure: ['chronological', 'achievement', 'biography'].includes(o.structure) ? o.structure : 'chronological', seconds, maxScenes: plan.bio.scenes + 2, kind });
+  const cp = careerPlan(facts, { style: ['Executive', 'Corporate', 'Cinematic', 'Conversational', 'Storytelling'].includes(o.style) ? o.style : 'Executive', person: o.person === 'third' ? 'third' : 'first', structure: ['chronological', 'achievement', 'biography'].includes(o.structure) ? o.structure : 'chronological', seconds, maxScenes: plan.bio.scenes, kind });
   const project = await db.insert('projects', {
     user_id: user.id, kind: 'bio', title: cp.title, prompt: `${kind} for ${facts.name}`, style: 'Corporate', duration: cp.scenes.reduce((a, s) => a + s.seconds, 0), aspect: o.aspect === '9:16' ? '9:16' : '16:9', category: kind, mode: 'quick',
     cast_ids: [], status: 'planned', chat: [], versions: [], shared: false, counted: false, plan: cp, plan_source: 'facts', updated_at: now(),
