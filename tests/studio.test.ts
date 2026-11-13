@@ -1,4 +1,5 @@
 import { toSrt } from '../lib/srt';
+import { mergeFacts } from '../lib/career';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { timeScenes, sceneCount, builtinTreatments, builtinPlan, builtinEdit, estimate, policyCheck, subjectOf } from '../lib/director';
@@ -110,4 +111,12 @@ test('subtitle file times captions from scene lengths', () => {
   assert.equal(srt, '1\n00:00:00,000 --> 00:00:04,000\nFirst line.\n\n2\n00:00:07,000 --> 00:00:12,000\nThird scene speaks here.\n');
   const long = toSrt([{ seconds: 10, narration: 'word '.repeat(40) }]);
   assert.equal(long.split('\n\n').length, 3); assert.match(long, /--> 00:00:10,000/);
+});
+
+test('résumé merge keeps positions and bullets the AI reader dropped', () => {
+  const base = parseResume(RESUME);
+  const ai = { ...base, roles: [{ ...base.roles[0], highlights: base.roles[0].highlights.slice(0, 1) }] };
+  const m = mergeFacts(ai, base);
+  assert.equal(m.roles.length, 2); assert.equal(m.roles[0].highlights.length, 2); assert.equal(m.roles[1].company, 'Northwind Financial');
+  assert.equal(mergeFacts(base, base).roles.length, 2, 'nothing is duplicated when both readers agree');
 });
