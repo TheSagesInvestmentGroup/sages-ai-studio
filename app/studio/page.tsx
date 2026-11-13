@@ -57,8 +57,8 @@ export default function Studio() {
         )}
         <div className="row">
           <button className="btn primary" id="enhance" onClick={() => create(false)} disabled={!!busy || prompt.trim().length < 8}>{busy === 'enhance' ? <><span className="spin" /> Your director is reading…</> : 'Enhance my creative idea'}</button>
-          <button className="btn" id="magic" onClick={() => create(true)} disabled={!!busy || prompt.trim().length < 8} title="The director picks a treatment and plans every scene in one step">{busy === 'magic' ? <><span className="spin" /> Planning…</> : 'One-Click Movie Magic'}</button>
-          <button className="btn ghost" id="surprise" onClick={surprise} disabled={!!busy}>Surprise me with an idea</button>
+          <button className="btn primary" id="magic" onClick={() => create(true)} disabled={!!busy || prompt.trim().length < 8} title="The director picks a treatment and plans every scene in one step">{busy === 'magic' ? <><span className="spin" /> Planning…</> : 'One-Click Movie Magic'}</button>
+          <button className="btn primary" id="surprise" onClick={surprise} disabled={!!busy}>Surprise me with an idea</button>
         </div>
         {me && !me.engines.video && <p className="small faint">Video rendering is not connected yet, so productions are delivered as narrated storyboard animatics. Planning, treatments and editing work in full.</p>}
       </section>
