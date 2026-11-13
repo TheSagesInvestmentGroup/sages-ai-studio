@@ -5,6 +5,7 @@ import { api } from '@/lib/client';
 import Player from '@/components/Player';
 import { useMe, Toast, NeedPlan } from '@/components/useMe';
 import { ASPECTS, VOICES } from '@/lib/plans';
+import { toSrt } from '@/lib/srt';
 
 const PILL: Record<string, [string, string]> = { planned: ['Planned', ''], rendering: ['Rendering', 'info'], ready: ['Rendered', 'good'], failed: ['Failed', 'bad'], stale: ['Needs new render', 'warn'] };
 const IDEAS = ['Make it more dramatic', 'Create a happier ending', 'Shorten the introduction', 'Turn this into a 15-second commercial', 'Make the narration more emotional', 'Add suspenseful music'];
@@ -61,6 +62,7 @@ export default function Workspace({ params }: { params: { id: string } }) {
         </div>
         <div className="row">
           <button className="btn sm" onClick={() => op({ op: 'duplicate' })} disabled={!!busy}>Duplicate</button>
+          {scenes.some(s => s.narration) && <button className="btn sm" id="srt" title="Download a subtitle file to upload with your video on YouTube, LinkedIn or Facebook" onClick={() => { const u = URL.createObjectURL(new Blob([toSrt(scenes)], { type: 'application/x-subrip' })); const l = document.createElement('a'); l.href = u; l.download = `${(p.title || 'captions').replace(/[^\w\- ]+/g, '').trim() || 'captions'}.srt`; l.click(); setTimeout(() => URL.revokeObjectURL(u), 2000); }}>Captions file</button>}
           <button className="btn sm" id="more" onClick={() => setMore(m => !m)} aria-expanded={more}>More versions</button>
           {confirmDel ? <><button className="btn sm danger" id="confirm-delete" onClick={() => run('del', async () => { await api(`/api/projects/${params.id}`, 'DELETE'); location.href = '/studio/projects'; })}>Delete for good</button><button className="btn sm ghost" onClick={() => setConfirmDel(false)}>Keep</button></> : <button className="btn sm ghost danger" onClick={() => setConfirmDel(true)}>Delete</button>}
         </div>
