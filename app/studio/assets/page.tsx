@@ -48,7 +48,7 @@ export default function Assets() {
         {role === 'voice' && <p className="small faint">Record one to three minutes of clear speech in a quiet room, with no music or other voices. Five minutes is the limit; longer recordings are not accepted. MP3, WAV or M4A.</p>}
         {role === 'avatar' && <p className="small faint">Use a clear, front-facing photo with good light and a plain background. PNG, JPG or WEBP.</p>}
         {picked.length > 0 && !busy && <p className="small muted">Ready to upload: {picked.map(f => f.name).join(', ')}</p>}
-        <div className="row" style={{ gap: 10, alignItems: 'center' }}><button id="asset-upload" className="btn" onClick={send} disabled={!!busy || !picked.length}>{busy ? 'Uploading…' : picked.length > 1 ? `Upload ${picked.length} files` : 'Upload file'}</button><span className="small faint">{!picked.length ? 'Step 1: choose a file. Step 2: tick the box. Step 3: press Upload.' : !rights ? 'Tick the permission box, then press Upload.' : 'Press Upload to add it to your library.'}</span></div>
+        <div className="row" style={{ gap: 10, alignItems: 'center' }}><button id="asset-upload" className="btn primary" onClick={send} disabled={!!busy || !picked.length}>{busy ? 'Uploading…' : picked.length > 1 ? `Upload ${picked.length} files` : 'Upload file'}</button><span className="small faint">{!picked.length ? 'Step 1: choose a file. Step 2: tick the box. Step 3: press Upload.' : !rights ? 'Tick the permission box, then press Upload.' : 'Press Upload to add it to your library.'}</span></div>
         {busy && <p className="notice"><span className="spin" /> {busy}</p>}
         <p className="small faint">MP4, MOV, WEBM, MP3, WAV, AAC, PNG, JPG, WEBP, PDF, DOCX, TXT and SRT.</p>
       </div>
