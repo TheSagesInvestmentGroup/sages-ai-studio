@@ -28,6 +28,7 @@ img { max-width: 100%; display: block; }
 .btn:hover { border-color: var(--gold-deep); } .btn:active { transform: translateY(1px); } .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.primary { background: linear-gradient(180deg, #f0c466, var(--gold-deep)); color: #1a1304; border-color: transparent; }
 .btn.primary:hover { filter: brightness(1.07); }
+.btn.primary:disabled { opacity: 0.85; filter: none; } /* action buttons keep their gold while waiting for input */
 .btn.ghost { background: transparent; } .btn.sm { padding: 6px 12px; font-size: 0.82rem; } .btn.danger { color: var(--bad); } .btn.block { width: 100%; }
 input, select, textarea { font: inherit; color: var(--text); background: var(--stage); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px; width: 100%; }
 textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
