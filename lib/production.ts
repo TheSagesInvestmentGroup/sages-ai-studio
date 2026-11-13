@@ -5,7 +5,8 @@ import { isDemo } from './config';
 import { spendCredits, addCredits, membership } from './auth';
 import { sceneCost } from './plans';
 import { Plan, Scene, scenePrompt, Brief } from './director';
-import { videoLive, videoSubmit, videoStatus, voiceLive, voiceSubmit } from './providers';
+import { videoLive, videoSubmit, videoStatus, voiceLive, voiceSubmit, imageVideoSubmit, avatarVideoSubmit } from './providers';
+import { signedUrl } from './files';
 
 export async function briefOf(project: Row): Promise<Brief> {
   const cast = project.cast_ids?.length ? (await db.list('characters', { user_id: project.user_id })).filter(c => project.cast_ids.includes(c.id)).map(c => ({ name: c.name, look: [c.appearance, c.wardrobe].filter(Boolean).join(', '), voice: c.voice })) : [];
@@ -45,7 +46,14 @@ export async function produce(user: Row, project: Row, sceneIds?: string[]) {
   for (const sc of targets) {
     const cost = sceneCost(sc.seconds, useVoice && !!sc.narration && !sc.voice_url);
     if (!(await spendCredits(user, cost, `Render scene ${sc.n}`, { project: project.id, scene: sc.id }))) { problems.push(`Not enough credits for scene ${sc.n} (${cost} needed).`); break; }
-    const r = await videoSubmit(scenePrompt(plan, sc, brief), project.aspect, sc.seconds);
+    const x = sc as any;
+    if (x.avatar_id) { // presenter scene: narration is recorded first, then the avatar speaks it (see poll)
+      Object.assign(sc, { status: 'rendering', job_id: null, error: null, cost, voice_failed: false });
+      charged += cost; continue;
+    }
+    let ref: string | null = null;
+    if (x.ref_asset && !isDemo) { const a = await db.get('assets', x.ref_asset); if (a && a.user_id === user.id && a.kind === 'image' && a.ready) ref = await signedUrl(a.path, 3600); }
+    const r = ref ? await imageVideoSubmit(scenePrompt(plan, sc, brief), ref, project.aspect, sc.seconds) : await videoSubmit(scenePrompt(plan, sc, brief), project.aspect, sc.seconds);
     if (r.error || !r.id) { await addCredits(user.id, cost, `Refund: scene ${sc.n} was not accepted`, { project: project.id }); sc.status = 'failed'; sc.error = r.error || 'Not accepted'; problems.push(`Scene ${sc.n}: ${sc.error}`); continue; }
     Object.assign(sc, { status: 'rendering', job_id: r.id, error: null, cost });
     charged += cost;
@@ -73,6 +81,10 @@ export async function poll(project: Row) {
     }
     // Narration is its own task: submit once, then collect the audio when it is ready.
     const vs = sc as any;
+    if (sc.status === 'rendering' && !sc.job_id && vs.avatar_id) { // presenter scene waiting for its narration
+      if (sc.voice_url) { const r = await avatarVideoSubmit(vs.avatar_id, sc.voice_url); if (r.id) { sc.job_id = r.id; vs.has_audio = true; } else { if (sc.cost) await addCredits(project.user_id, sc.cost, `Refund: scene ${sc.n} was not accepted`, { project: project.id }); Object.assign(sc, { status: 'failed', error: r.error, cost: 0 }); } dirty = true; }
+      else if (vs.voice_failed) { if (sc.cost) await addCredits(project.user_id, sc.cost, `Refund: scene ${sc.n} narration failed`, { project: project.id }); Object.assign(sc, { status: 'failed', error: 'The narration could not be recorded.', cost: 0 }); dirty = true; }
+    }
     if (voiceLive() && sc.narration && !sc.voice_url && project.status !== 'concept' && project.status !== 'planned') {
       if (vs.voice_job) {
         const st = await videoStatus(vs.voice_job);
@@ -87,6 +99,15 @@ export async function poll(project: Row) {
         if (r.id) { vs.voice_job = r.id; dirty = true; } else { vs.voice_failed = true; dirty = true; }
       }
     }
+  }
+  const pl = plan as any;
+  if (pl.music_job) { // soundtrack
+    const st = await videoStatus(pl.music_job);
+    if (st.state === 'done' && st.url) {
+      let url = st.url;
+      try { const r = await fetch(st.url); if (r.ok) url = (await saveRender(`${project.id}/music-${Date.now()}.mp3`, await r.arrayBuffer(), 'audio/mpeg')) || st.url; } catch { /* keep provider URL */ }
+      pl.music_url = url; pl.music_job = null; dirty = true;
+    } else if (st.state === 'failed') { pl.music_job = null; pl.music_error = st.error || 'The soundtrack could not be composed.'; if (pl.music_cost) await addCredits(project.user_id, pl.music_cost, 'Refund: soundtrack failed', { project: project.id }); dirty = true; }
   }
   if (!dirty) return project;
   const working = plan.scenes.some(s => s.status === 'rendering');

@@ -49,6 +49,7 @@ export const isOwner = (u: Row | null) => !!u && (u.role === 'owner' || (!!cfg.o
 
 /** Access ends the month after payment stops: status must be active and the paid period current. */
 export function membership(u: Row | null) {
+  if (isOwner(u)) { const p = planOf(u?.tier) || planOf('business'); return { active: true, plan: p }; }
   const plan = planOf(u?.tier);
   const current = !u?.period_end || new Date(u.period_end).getTime() > Date.now() - 3 * 864e5;
   const active = !!plan && u?.status === 'active' && current;

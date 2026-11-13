@@ -3,7 +3,7 @@
 // without a clip are drawn as a storyboard animatic and labelled as such.
 import { useEffect, useRef, useState } from 'react';
 
-export interface PScene { id: string; n: number; beat?: string; title: string; seconds: number; visual: string; camera?: string; narration?: string; onscreen?: string; lower_third?: string; status?: string; clip_url?: string | null; voice_url?: string | null }
+export interface PScene { id: string; n: number; beat?: string; title: string; seconds: number; visual: string; camera?: string; narration?: string; onscreen?: string; lower_third?: string; status?: string; clip_url?: string | null; voice_url?: string | null; has_audio?: boolean }
 const SIZE: Record<string, [number, number]> = { '16:9': [1280, 720], '9:16': [720, 1280], '1:1': [1080, 1080] };
 const PALETTES = [['#1b2a52', '#e3b24c'], ['#3a1d4e', '#f08a5d'], ['#0f3b46', '#7fd6c2'], ['#40201d', '#f0c466'], ['#1d2f25', '#b8d67a'], ['#27224f', '#8fa8ff']];
 const hash = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -16,7 +16,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number, maxLine
   return lines;
 }
 
-export default function Player({ scenes, aspect = '16:9', title, synthetic = true, onScene }: { scenes: PScene[]; aspect?: string; title: string; synthetic?: boolean; onScene?: (id: string) => void }) {
+export default function Player({ scenes, aspect = '16:9', title, synthetic = true, onScene, music }: { scenes: PScene[]; aspect?: string; title: string; synthetic?: boolean; onScene?: (id: string) => void; music?: string | null }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const st = useRef({ i: 0, t: 0, last: 0, playing: false, spoke: -1 });
   const vids = useRef<Record<string, HTMLVideoElement>>({}), audio = useRef<HTMLAudioElement | null>(null);
@@ -24,9 +24,21 @@ export default function Player({ scenes, aspect = '16:9', title, synthetic = tru
   const opts = useRef({ captions, voice, scenes }); opts.current = { captions, voice, scenes };
   const [W, H] = SIZE[aspect] || SIZE['16:9'];
   const recorder = useRef<MediaRecorder | null>(null);
+  // Web Audio graph: every sound goes to the speakers and, while exporting, into the recording.
+  const mix = useRef<{ ctx: AudioContext; out: GainNode; rec: MediaStreamAudioDestinationNode | null; wired: WeakSet<HTMLMediaElement> } | null>(null);
+  const tune = useRef<HTMLAudioElement | null>(null);
+  function graph() {
+    if (!mix.current) { try { const ctx = new AudioContext(), out = ctx.createGain(); out.connect(ctx.destination); mix.current = { ctx, out, rec: null, wired: new WeakSet() }; } catch { return null; } }
+    mix.current.ctx.resume().catch(() => {});
+    return mix.current;
+  }
+  function wire(el: HTMLMediaElement, gain = 1) {
+    const g = graph(); if (!g || g.wired.has(el)) return;
+    try { const src = g.ctx.createMediaElementSource(el), vol = g.ctx.createGain(); vol.gain.value = gain; src.connect(vol); vol.connect(g.out); g.wired.add(el); } catch { /* plays directly instead */ }
+  }
 
   useEffect(() => { // preload rendered clips
-    for (const s of scenes) if (s.clip_url && vids.current[s.id]?.src !== s.clip_url) { const v = document.createElement('video'); v.crossOrigin = 'anonymous'; v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = s.clip_url; vids.current[s.id] = v; }
+    for (const s of scenes) if (s.clip_url && vids.current[s.id]?.src !== s.clip_url) { const v = document.createElement('video'); v.crossOrigin = 'anonymous'; v.muted = !s.has_audio; v.playsInline = true; v.preload = 'auto'; v.src = s.clip_url; vids.current[s.id] = v; }
   }, [scenes]);
 
   function draw(now: number) {
@@ -36,13 +48,13 @@ export default function Player({ scenes, aspect = '16:9', title, synthetic = tru
     s.last = now;
     if (s.t >= sc.seconds) {
       if (s.i < list.length - 1) { s.i++; s.t = 0; setIdx(s.i); onScene?.(list[s.i].id); }
-      else { s.playing = false; s.t = sc.seconds; setPlaying(false); stopAudio(); if (recorder.current?.state === 'recording') recorder.current.stop(); }
+      else { s.playing = false; s.t = sc.seconds; setPlaying(false); stopAudio(); tune.current?.pause(); if (recorder.current?.state === 'recording') recorder.current.stop(); }
     }
     const cur = list[s.i], p = Math.min(1, s.t / cur.seconds), u = (W / 1280) * (aspect === '9:16' ? 2.1 : aspect === '1:1' ? 1.5 : 1.4);
     const v = vids.current[cur.id];
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
     if (cur.clip_url && v && v.readyState >= 2) {
-      if (s.playing && v.paused) { v.currentTime = Math.min(s.t, Math.max(0, (v.duration || cur.seconds) - 0.1)); v.play().catch(() => {}); }
+      if (s.playing && v.paused) { if (cur.has_audio) wire(v); v.currentTime = Math.min(s.t, Math.max(0, (v.duration || cur.seconds) - 0.1)); v.play().catch(() => {}); }
       if (!s.playing && !v.paused) v.pause();
       const r = Math.max(W / v.videoWidth, H / v.videoHeight), dw = v.videoWidth * r, dh = v.videoHeight * r; // cover fit; this is how square and vertical reframes are produced
       ctx.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh);
@@ -74,24 +86,33 @@ export default function Player({ scenes, aspect = '16:9', title, synthetic = tru
 
   function stopAudio() { try { speechSynthesis.cancel(); } catch { /* unsupported */ } audio.current?.pause(); Object.values(vids.current).forEach(v => v.pause()); }
   function speak(sc: PScene) {
-    stopAudio(); if (!opts.current.voice || !sc.narration) return;
-    if (sc.voice_url) { audio.current = new Audio(sc.voice_url); audio.current.play().catch(() => {}); return; }
+    stopAudio(); if (!opts.current.voice || !sc.narration || sc.has_audio) return; // presenter clips carry their own voice
+    if (sc.voice_url) { const a = new Audio(); a.crossOrigin = 'anonymous'; a.src = sc.voice_url; audio.current = a; wire(a); a.play().catch(() => {}); return; }
     try { const u = new SpeechSynthesisUtterance(sc.narration); u.rate = 0.98; speechSynthesis.speak(u); } catch { /* no speech engine */ }
   }
 
   useEffect(() => { let raf = 0; const loop = (n: number) => { draw(n); raf = requestAnimationFrame(loop); }; st.current.last = performance.now(); raf = requestAnimationFrame(loop); return () => { cancelAnimationFrame(raf); stopAudio(); }; /* eslint-disable-next-line */ }, [aspect]);
   useEffect(() => { if (st.current.i >= scenes.length) { st.current.i = 0; st.current.t = 0; setIdx(0); } }, [scenes.length]);
 
-  const play = (on: boolean) => { const s = st.current; if (on && s.i === scenes.length - 1 && s.t >= scenes[s.i].seconds) { s.i = 0; s.t = 0; setIdx(0); } s.playing = on; s.spoke = on ? -1 : s.spoke; if (!on) stopAudio(); setPlaying(on); };
+  function score(on: boolean, restart = false) { // soundtrack under the narration
+    if (!music) return;
+    if (!tune.current || tune.current.src !== music) { const a = new Audio(); a.crossOrigin = 'anonymous'; a.src = music; a.loop = true; tune.current = a; wire(a, 0.28); }
+    if (restart) tune.current.currentTime = 0;
+    if (on) tune.current.play().catch(() => {}); else tune.current.pause();
+  }
+  useEffect(() => () => { tune.current?.pause(); }, []);
+  const play = (on: boolean) => { const s = st.current; let again = false; if (on && s.i === scenes.length - 1 && s.t >= scenes[s.i].seconds) { s.i = 0; s.t = 0; setIdx(0); again = true; } if (on) graph(); s.playing = on; s.spoke = on ? -1 : s.spoke; if (!on) stopAudio(); score(on, again || (on && s.i === 0 && s.t === 0)); setPlaying(on); };
   const jump = (i: number) => { const s = st.current; s.i = i; s.t = 0; s.spoke = -1; setIdx(i); stopAudio(); onScene?.(scenes[i].id); };
 
   function record() { // export the full preview as a video file, recorded in the browser
     const c = canvas.current; if (!c || typeof MediaRecorder === 'undefined') return;
-    const mime = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)); if (!mime) return;
-    const chunks: Blob[] = [], r = new MediaRecorder(c.captureStream(30), { mimeType: mime, videoBitsPerSecond: 6_000_000 });
+    const mime = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)); if (!mime) return;
+    const g = graph(), tracks = [...c.captureStream(30).getVideoTracks()];
+    if (g) { g.rec = g.ctx.createMediaStreamDestination(); g.out.connect(g.rec); tracks.push(...g.rec.stream.getAudioTracks()); }
+    const chunks: Blob[] = [], r = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 160_000 });
     r.ondataavailable = e => e.data.size && chunks.push(e.data);
-    r.onstop = () => { const url = URL.createObjectURL(new Blob(chunks, { type: mime })); setFile(url); setRec('done'); const a = document.createElement('a'); a.href = url; a.download = `${title.replace(/[^\w]+/g, '-').toLowerCase() || 'production'}.${mime.includes('mp4') ? 'mp4' : 'webm'}`; a.click(); };
-    recorder.current = r; setRec('recording'); setVoice(false); jump(0); r.start(); play(true);
+    r.onstop = () => { if (g?.rec) { try { g.out.disconnect(g.rec); } catch { /* already detached */ } g.rec = null; } const url = URL.createObjectURL(new Blob(chunks, { type: mime })); setFile(url); setRec('done'); const a = document.createElement('a'); a.href = url; a.download = `${title.replace(/[^\w]+/g, '-').toLowerCase() || 'production'}.${mime.includes('mp4') ? 'mp4' : 'webm'}`; a.click(); };
+    recorder.current = r; setRec('recording'); jump(0); r.start(); play(true);
   }
 
   const total = scenes.reduce((a, s) => a + s.seconds, 0);
@@ -111,7 +132,7 @@ export default function Player({ scenes, aspect = '16:9', title, synthetic = tru
         </div>
       </div>
       {rec === 'recording' && <p className="notice">Recording the preview in real time ({total} seconds). Keep this tab open.</p>}
-      {rec === 'done' && <p className="notice good">Your video file was saved to your downloads. {file && <a href={file} download>Download again</a>}. The exported file has picture and captions; narration and music are not yet mixed into the file.</p>}
+      {rec === 'done' && <p className="notice good">Your video file was saved to your downloads. {file && <a href={file} download>Download again</a>}. The file includes the picture, captions, recorded narration and soundtrack. The browser&rsquo;s built-in voice, used when no narration has been recorded, cannot be captured.</p>}
       <div className="row" style={{ gap: 6 }}>{scenes.map((s, i) => <button key={s.id} className={`chip ${i === idx ? 'on' : ''}`} onClick={() => jump(i)} aria-label={`Go to scene ${s.n}`} disabled={rec === 'recording'}>{s.n}</button>)}</div>
     </div>
   );

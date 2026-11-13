@@ -14,6 +14,9 @@ export default function Workspace({ params }: { params: { id: string } }) {
   const [d, setD] = useState<any>(null), [err, setErr] = useState<any>(null), [busy, setBusy] = useState(''), [toast, setToast] = useState('');
   const [sel, setSel] = useState<string | null>(null), [picked, setPicked] = useState<string[]>([]), [text, setText] = useState(''), [editing, setEditing] = useState<any>(null), [confirmDel, setConfirmDel] = useState(false), [more, setMore] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
+  const [lib, setLib] = useState<any[]>([]);
+  useEffect(() => { api('/api/assets').then(r => setLib(r.assets || [])).catch(() => {}); }, []);
+  const images = lib.filter(a => a.kind === 'image' && a.ready && a.role !== 'avatar'), presenters = lib.filter(a => a.meta?.kind === 'avatar' && a.meta.status === 'READY'), myVoices = lib.filter(a => a.meta?.kind === 'voice' && a.meta.status === 'READY');
   const say = (t: string) => { setToast(t); setTimeout(() => setToast(''), 3800); };
   const p = d?.project, plan = p?.plan, scenes: any[] = plan?.scenes || [];
 
@@ -21,7 +24,7 @@ export default function Workspace({ params }: { params: { id: string } }) {
   useEffect(() => { load(); }, [load]);
   // While scenes render, check on them every 6 seconds.
   const voicing = !!d?.engines?.voice && !!p && !['concept', 'planned'].includes(p.status) && scenes.some(s => s.narration && !s.voice_url && !s.voice_failed);
-  const rendering = scenes.some(s => s.status === 'rendering') || voicing;
+  const rendering = scenes.some(s => s.status === 'rendering') || voicing || !!plan?.music_job;
   useEffect(() => { if (!rendering) return; const t = setInterval(() => api(`/api/projects/${params.id}/poll`).then(r => { setD((x: any) => ({ ...x, project: r.project, estimate: r.estimate })); if (!r.project.plan.scenes.some((s: any) => s.status === 'rendering')) refresh(); }).catch(() => {}), 6000); return () => clearInterval(t); }, [rendering, params.id, refresh]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ block: 'nearest' }); }, [p?.chat?.length]);
 
@@ -96,7 +99,7 @@ export default function Workspace({ params }: { params: { id: string } }) {
       ) : (
         <section className="work">
           <div className="stack">
-            <Player scenes={scenes} aspect={p.aspect} title={p.title}/>
+            <Player scenes={scenes} aspect={p.aspect} title={p.title} music={plan.music_url} />
             <div className="panel tight stack" style={{ gap: 6 }}><span className="eyebrow">Logline</span><p>{plan.logline}</p><p className="small muted"><b>Tone.</b> {plan.tone} · <b>Music.</b> {plan.music_direction} · <b>Voice.</b> {plan.voice}{plan.setting ? <> · <b>Setting.</b> {plan.setting}</> : null}</p></div>
             <div className="row between"><h2>Scenes</h2><span className="muted small">Select a scene to direct it on its own</span></div>
             <div className="stack" style={{ gap: 8 }}>
@@ -104,13 +107,19 @@ export default function Workspace({ params }: { params: { id: string } }) {
                 <div key={s.id} className={`scene ${sel === s.id ? 'sel' : ''}`} onClick={() => setSel(sel === s.id ? null : s.id)} role="button" tabIndex={0} aria-pressed={sel === s.id} onKeyDown={e => { if (e.key === 'Enter') setSel(sel === s.id ? null : s.id); }}>
                   <span className="n">{s.n}</span>
                   <div className="stack" style={{ gap: 6 }}>
-                    <div className="row between"><b>{s.title}</b><span className="row" style={{ gap: 6 }}>{s.approved && <span className="pill good">Approved</span>}<span className={`pill ${PILL[s.status]?.[1]}`}>{PILL[s.status]?.[0]}</span><span className="pill" title="Length and credit cost to render">{s.seconds}s · {est?.perScene?.[s.id] ?? 0} cr</span></span></div>
+                    <div className="row between"><b>{s.title}</b><span className="row" style={{ gap: 6 }}>{s.approved && <span className="pill good">Approved</span>}{s.avatar_id && <span className="pill info">Presenter</span>}{s.ref_asset && <span className="pill info">From image</span>}<span className={`pill ${PILL[s.status]?.[1]}`}>{PILL[s.status]?.[0]}</span><span className="pill" title="Length and credit cost to render">{s.seconds}s · {est?.perScene?.[s.id] ?? 0} cr</span></span></div>
                     <p className="small">{s.visual}</p>
                     {s.narration && <p className="small muted">“{s.narration}”</p>}
                     {s.error && <p className="small" style={{ color: 'var(--bad)' }}>{s.error} Your credits for this scene were refunded.</p>}
                     {sel === s.id && (
                       <div className="stack" style={{ gap: 8 }} onClick={e => e.stopPropagation()}>
                         <p className="small faint">Camera: {s.camera} · Light: {s.lighting} · Sound: {s.sound}</p>
+                        {d.engines.video && (images.length > 0 || presenters.length > 0) && (
+                          <div className="grid g2">
+                            {images.length > 0 && <label className="field">Start this scene from my image<select value={s.ref_asset || ''} onChange={e => op({ op: 'sceneRef', sceneId: s.id, assetId: e.target.value || null }, e.target.value ? 'This scene will start from your image.' : 'Image removed from this scene.')} disabled={!!busy}><option value="">No image</option>{images.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+                            {presenters.length > 0 && <label className="field">Presenter speaks this scene<select value={presenters.find(a => a.meta.rw_id === s.avatar_id)?.id || ''} onChange={e => op({ op: 'sceneAvatar', sceneId: s.id, assetId: e.target.value || null }, e.target.value ? 'Your presenter will speak this scene.' : 'Presenter removed from this scene.')} disabled={!!busy}><option value="">No presenter</option>{presenters.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+                          </div>
+                        )}
                         <div className="row">
                           <button className="btn sm" onClick={() => op({ op: 'approve', sceneId: s.id, on: !s.approved })}>{s.approved ? 'Remove approval' : 'Approve scene'}</button>
                           {d.engines.video && <button className="btn sm" onClick={() => produce([s.id])} disabled={!!busy || s.status === 'rendering'}>{s.clip_url ? 'Render again' : 'Render this scene'} ({est?.perScene?.[s.id]} cr)</button>}
@@ -152,7 +161,9 @@ export default function Workspace({ params }: { params: { id: string } }) {
                   <div className="row between small muted"><span>Your balance</span><span>{me?.user.credits?.toLocaleString() ?? '…'} credits</span></div>
                   <button className="btn primary block" id="produce" onClick={() => produce()} disabled={!!busy || rendering || !todo.length}>{rendering ? <><span className="spin" /> Rendering scenes…</> : busy === 'produce' ? <span className="spin" /> : todo.length ? `Render ${todo.length} scene${todo.length > 1 ? 's' : ''}` : 'All scenes rendered'}</button>
                   <p className="small faint">Only scenes that are new or changed are rendered. Failed renders are refunded.</p>
-                  <label className="field">Narrator voice<select id="narrator" value={plan.voice_preset || ''} onChange={e => e.target.value && op({ op: 'voice', preset: e.target.value }, 'Narrator changed. Recording the new narration now.')} disabled={!!busy}><option value="">Studio default</option>{VOICES.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+                  <label className="field">Narrator voice<select id="narrator" value={plan.voice_preset || ''} onChange={e => e.target.value && op({ op: 'voice', preset: e.target.value }, 'Narrator changed. Recording the new narration now.')} disabled={!!busy}><option value="">Studio default</option>{myVoices.map(a => <option key={a.id} value={`custom:${a.meta.rw_id}`}>My voice: {a.name}</option>)}{VOICES.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+                  <div className="row between"><span className="small muted">{plan.music_job ? <><span className="spin" /> Composing your soundtrack…</> : plan.music_url ? 'Soundtrack ready. It plays under the narration.' : 'No soundtrack yet.'}</span><span className="row" style={{ gap: 6 }}>{!plan.music_job && <button className="btn sm" id="compose-music" onClick={() => op({ op: 'music' }, 'Composing your soundtrack. This takes about a minute.').then(() => refresh())} disabled={!!busy}>{plan.music_url ? 'Compose a new one' : 'Compose soundtrack'} ({Math.max(4, Math.ceil(scenes.reduce((a, s) => a + s.seconds, 0) / 8))} cr)</button>}{plan.music_url && !plan.music_job && <button className="btn sm ghost" onClick={() => op({ op: 'musicOff' }, 'Soundtrack removed.')} disabled={!!busy}>Remove</button>}</span></div>
+                  {plan.music_error && <p className="small" style={{ color: 'var(--bad)' }}>{plan.music_error} Your credits were refunded.</p>}
                   {voicing && <p className="small muted"><span className="spin" /> Recording narration…</p>}
                 </>
               ) : (

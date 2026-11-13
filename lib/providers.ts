@@ -60,8 +60,38 @@ async function rwSubmit(path: string, body: any): Promise<{ id?: string; error?:
 export const videoSubmit = (prompt: string, aspect: string, seconds: number) =>
   rwSubmit('/v1/text_to_video', { model: cfg.runwayModel, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
 
-export const voiceSubmit = (text: string, preset?: string) =>
-  rwSubmit('/v1/text_to_speech', { model: cfg.runwayVoiceModel, promptText: text.slice(0, 2000), voice: { type: 'runway-preset', presetId: preset || cfg.runwayVoice } });
+/** Narrator: a Runway preset name, or "custom:<id>" for a member's own cloned voice. */
+export const voiceSubmit = (text: string, voice?: string) =>
+  rwSubmit('/v1/text_to_speech', { model: cfg.runwayVoiceModel, promptText: text.slice(0, 2000), voice: voice?.startsWith('custom:') ? { type: 'custom', id: voice.slice(7) } : { type: 'runway-preset', presetId: voice || cfg.runwayVoice } });
+
+/** Scene that starts from a member's uploaded image. */
+export const imageVideoSubmit = (prompt: string, imageUrl: string, aspect: string, seconds: number) =>
+  rwSubmit('/v1/image_to_video', { model: cfg.runwayModel, promptImage: imageUrl, promptText: prompt.slice(0, 1000), ratio: aspect === '9:16' ? '720:1280' : '1280:720', duration: Math.max(3, Math.min(10, Math.round(seconds))) });
+
+/** Instrumental soundtrack for a whole production. */
+export const musicSubmit = (prompt: string, seconds: number) =>
+  rwSubmit('/v1/text_to_music', { model: 'eleven_music_v2_5', promptText: prompt.slice(0, 2000), duration: Math.max(3, Math.min(600, Math.round(seconds))), instrumental: true });
+
+/** Voice clone from a consented recording. Returns the Runway voice id. */
+export const voiceCloneCreate = (name: string, audioUrl: string) => rwSubmit('/v1/voices', { name: name.slice(0, 100), from: { type: 'audio', audio: audioUrl } });
+
+/** Presenter avatar from a consented photo. */
+export const avatarCreate = (name: string, imageUrl: string) =>
+  rwSubmit('/v1/avatars', { name: name.slice(0, 50), referenceImage: imageUrl, personality: 'A composed, credible on-camera presenter.', voice: { type: 'runway-live-preset', presetId: 'marcus' } });
+
+/** The avatar speaks an already recorded narration file. */
+export const avatarVideoSubmit = (avatarId: string, audioUrl: string) =>
+  rwSubmit('/v1/avatar_videos', { model: 'gwm1_avatars', avatar: { type: 'custom', avatarId }, speech: { type: 'audio', audio: audioUrl } });
+
+/** READY, PROCESSING or FAILED for a cloned voice ("voices") or an avatar ("avatars"). */
+export async function resourceStatus(kind: 'voices' | 'avatars', id: string): Promise<'READY' | 'PROCESSING' | 'FAILED'> {
+  try {
+    const r = await fetchT(`${RW}/v1/${kind}/${encodeURIComponent(id)}`, { headers: rwHeaders() }, 12000);
+    if (!r.ok) return 'PROCESSING';
+    const s = (await r.json())?.status;
+    return s === 'READY' || s === 'FAILED' ? s : 'PROCESSING';
+  } catch { return 'PROCESSING'; }
+}
 
 /** Status of any Runway task (video or voice). */
 export async function videoStatus(id: string): Promise<{ state: 'working' | 'done' | 'failed'; url?: string; error?: string }> {

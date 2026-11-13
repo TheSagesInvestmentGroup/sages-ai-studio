@@ -30,8 +30,9 @@ create table if not exists characters (
 create table if not exists assets (
   id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
   name text not null, kind text, role text, note text, size bigint, mime text, path text, ready boolean not null default false,
-  visibility text not null default 'private', created_at timestamptz not null default now()
+  visibility text not null default 'private', meta jsonb not null default '{}', created_at timestamptz not null default now()
 );
+alter table assets add column if not exists meta jsonb not null default '{}';
 create table if not exists tickets (
   id uuid primary key default gen_random_uuid(), user_id uuid not null references profiles(id) on delete cascade,
   email text, name text, subject text, status text not null default 'open', messages jsonb not null default '[]',
