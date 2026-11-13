@@ -52,7 +52,7 @@ export async function produce(user: Row, project: Row, sceneIds?: string[]) {
   let charged = 0; const problems: string[] = [];
   for (const sc of targets) {
     const cost = sceneCost(sc.seconds, useVoice && !!sc.narration && !sc.voice_url);
-    if (!(await spendCredits(user, cost, `Render scene ${sc.n}`, { project: project.id, scene: sc.id }))) { problems.push(`Not enough credits for scene ${sc.n} (${cost} needed).`); break; }
+    if (!(await spendCredits(user, cost, `Render scene ${sc.n}`, { project: project.id, scene: sc.id }))) { problems.push(`Not enough credits for scene ${sc.n} (${cost} needed). Add credits on the Membership & Credits page to finish rendering.`); break; }
     const x = sc as any;
     if (x.avatar_id) { // presenter scene: narration is recorded first, then the avatar speaks it (see poll)
       Object.assign(sc, { status: 'rendering', job_id: null, error: null, cost, voice_failed: false });
