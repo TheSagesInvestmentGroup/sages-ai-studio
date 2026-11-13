@@ -24,7 +24,7 @@ export const POST = (req: Request, { params }: Ctx) => withUser(req, async user 
   const url = await signedUrl(a.path, 3600);
   const name = `${user.name || 'Member'} ${kind}`.slice(0, 48);
   const r = url ? (kind === 'voice' ? await voiceCloneCreate(name, url) : await avatarCreate(name, url)) : { error: 'The file could not be read.' };
-  if (r.error || !r.id) { await addCredits(user.id, COST, `Refund: ${kind} was not accepted`, { asset: a.id }); return fail(502, r.error || 'The request was not accepted.'); }
+  if (r.error || !r.id) { await addCredits(user.id, COST, `Refund: ${kind} was not accepted`, { asset: a.id }); return fail(502, kind === 'voice' ? 'This recording was not accepted. A voice sample must be clear speech between 10 seconds and 5 minutes long. Your credits were returned.' : 'This photo was not accepted. Use a clear, front-facing photo of one person. Your credits were returned.'); }
   await audit(user.id, `${kind}.create`, { asset: a.id });
   return ok({ asset: await db.update('assets', a.id, { meta: { ...(a.meta || {}), kind, rw_id: r.id, status: 'PROCESSING' } }) });
 }, { member: true, limit: 10 });
