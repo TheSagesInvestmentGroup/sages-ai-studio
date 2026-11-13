@@ -5,6 +5,8 @@ import { uploadAsset } from '@/lib/upload';
 import { useMe, NeedPlan } from '@/components/useMe';
 
 const STEPS = ['Career story', 'Review facts', 'Your photo', 'Presentation', 'Generate'];
+// One picture for each step of the studio.
+const BIO_ART: [string, string][] = [['bio-1-intro', 'Personal Bio and Résumé. Showcase your story. Inspire opportunity.'], ['bio-2-resume', 'Your résumé: experience, skills, achievements and goals.'], ['bio-3-profile', 'Your profile. Your potential.'], ['bio-4-achievements', 'Achievements, skills, experience and goals.'], ['bio-5-remembered', 'Personal Bio and Résumé. Be seen. Be remembered.']];
 const lines = (s: string) => s.split('\n').map(x => x.trim()).filter(Boolean);
 
 export default function Bio() {
@@ -43,6 +45,7 @@ export default function Bio() {
   const setRole = (i: number, k: string, v: any) => setFacts((f: any) => ({ ...f, roles: f.roles.map((r: any, j: number) => (j === i ? { ...r, [k]: v } : r)) }));
 
   return (
+    <div className="bio-wrap">
     <div className="stack-lg" style={{ maxWidth: 860 }}>
       <div className="stack"><span className="eyebrow">Bio &amp; Résumé Studio</span><h1 style={{ fontSize: '2rem' }}>Turn your career into a story worth watching</h1><p className="muted">Upload a résumé, approve the facts, and receive a narrated career video with a shareable portfolio page. Nothing is added that you did not write.</p></div>
       <ol className="row" style={{ listStyle: 'none', padding: 0, margin: 0, gap: 6 }}>{STEPS.map((s, i) => <li key={s} className={`chip ${i === step ? 'on' : ''}`} style={{ cursor: 'default' }} aria-current={i === step ? 'step' : undefined}>{i + 1}. {s}</li>)}</ol>
@@ -50,6 +53,7 @@ export default function Bio() {
       {err && (err.needsPlan ? <NeedPlan text={err.message} /> : <div className="notice bad" role="alert">{err.message}</div>)}
       {busy && <p className="notice"><span className="spin" /> {busy}</p>}
 
+      {step === 0 && <div className="gallery" aria-label="Personal Bio and Résumé">{BIO_ART.map(([f, alt]) => <img key={f} src={`/brand/${f}.jpg`} alt={alt} loading="lazy" width={630} height={1020} />)}</div>}
       {step === 0 && (
         <div className="panel stack">
           <h3>Upload your career story</h3>
@@ -122,6 +126,8 @@ export default function Bio() {
           <div className="row"><button className="btn ghost" onClick={() => setStep(2)}>Back</button><button className="btn primary" id="bio-create" onClick={create} disabled={!!busy}>Generate my career video</button></div>
         </div>
       )}
+    </div>
+    {step > 0 && <aside className="bio-art"><img src={`/brand/${BIO_ART[step][0]}.jpg`} alt={BIO_ART[step][1]} width={630} height={1020} /></aside>}
     </div>
   );
 }
