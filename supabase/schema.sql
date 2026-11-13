@@ -8,6 +8,7 @@ create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null, name text, interests jsonb not null default '[]',
   tier text, status text not null default 'none', credits integer not null default 0 check (credits >= 0),
+  pack_credits integer not null default 0, -- purchased extra credits still unspent; these carry over at renewal
   videos_used integer not null default 0, period_end timestamptz, onboarded boolean not null default false,
   role text not null default 'member', stripe_customer_id text unique, stripe_subscription_id text, last_event text,
   created_at timestamptz not null default now()
@@ -80,3 +81,6 @@ alter table audit_log enable row level security; -- no policies: server only
 -- "renders" holds finished clips and narration at unguessable paths so shared productions can play.
 insert into storage.buckets (id, name, public, file_size_limit) values ('assets', 'assets', false, 419430400) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('renders', 'renders', true) on conflict (id) do nothing;
+
+-- Added 13 Nov 2026: extra credit packs
+alter table profiles add column if not exists pack_credits integer not null default 0;
