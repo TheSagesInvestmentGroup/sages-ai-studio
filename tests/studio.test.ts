@@ -100,7 +100,7 @@ test('career script uses only approved facts', () => {
   assert.equal(p.scenes.reduce((a, s) => a + s.seconds, 0), Math.min(60, p.scenes.length * 10)); // scenes are capped at 10 seconds each
   const said = p.scenes.map(s => s.narration).join(' ');
   assert.match(said, /Harbor National Bank/); assert.match(said, /Northwind Financial/); assert.match(said, /CISSP/);
-  const known = RESUME + ' Hello I’m I’d welcome the chance to talk about how can contribute Thank you for your time As at from to built the experience rely on today My credentials include';
+  const known = RESUME + ' Hello I’m I’d welcome the chance to talk about how can contribute Thank you for your time As at from to Today From serve role have held since was My credentials include';
   for (const w of said.match(/\b[A-Z][a-z]{3,}\b/g) || []) assert.ok(known.includes(w), `"${w}" must come from the résumé or the fixed template`);
   assert.ok(p.scenes.indexOf(p.scenes.find(s => /Northwind/.test(s.narration))!) < p.scenes.indexOf(p.scenes.find(s => /Harbor/.test(s.narration))!), 'chronological: oldest role first');
 });
