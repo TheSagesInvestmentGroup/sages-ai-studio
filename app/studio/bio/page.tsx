@@ -72,14 +72,14 @@ export default function Bio() {
           {facts.roles.map((r: any, i: number) => (
             <div className="panel tight flat stack" key={i} style={{ border: '1px solid var(--line-soft)' }}>
               <div className="grid g3"><label className="field">Title<input value={r.title} onChange={e => setRole(i, 'title', e.target.value)} /></label><label className="field">Company<input value={r.company} onChange={e => setRole(i, 'company', e.target.value)} /></label><label className="field">Dates<input value={r.dates} onChange={e => setRole(i, 'dates', e.target.value)} /></label></div>
-              <label className="field">Accomplishments, one per line<textarea value={r.highlights.join('\n')} onChange={e => setRole(i, 'highlights', lines(e.target.value))} style={{ minHeight: 70 }} /></label>
+              <label className="field">Accomplishments, one per line<textarea value={r.highlights.join('\n')} onChange={e => setRole(i, 'highlights', e.target.value.split('\n'))} style={{ minHeight: 120 }} /></label>
               <div><button className="btn sm ghost danger" onClick={() => setFacts({ ...facts, roles: facts.roles.filter((_: any, j: number) => j !== i) })}>Remove position</button></div>
             </div>
           ))}
           <div><button className="btn sm" onClick={() => setFacts({ ...facts, roles: [...facts.roles, { title: '', company: '', dates: '', highlights: [] }] })}>Add a position</button></div>
           <div className="grid g2">
-            <label className="field">Education, one per line<textarea value={facts.education.join('\n')} onChange={e => setFacts({ ...facts, education: lines(e.target.value) })} style={{ minHeight: 80 }} /></label>
-            <label className="field">Certifications, licenses and awards, one per line<textarea value={facts.credentials.join('\n')} onChange={e => setFacts({ ...facts, credentials: lines(e.target.value) })} style={{ minHeight: 80 }} /></label>
+            <label className="field">Education, one per line (type or paste)<textarea value={facts.education.join('\n')} onChange={e => setFacts({ ...facts, education: e.target.value.split('\n') })} style={{ minHeight: 110 }} /></label>
+            <label className="field">Certifications, licenses and awards, one per line (type or paste)<textarea value={facts.credentials.join('\n')} onChange={e => setFacts({ ...facts, credentials: e.target.value.split('\n') })} style={{ minHeight: 110 }} /></label>
           </div>
           <label className="check"><input id="confirm-facts" type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />These facts are accurate and I approve them for my career video.</label>
           <div className="row"><button className="btn ghost" onClick={() => setStep(0)}>Back</button><button className="btn primary" id="facts-next" disabled={!confirmed || !facts.name} onClick={() => setStep(2)}>Continue</button></div>
