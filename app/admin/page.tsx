@@ -20,6 +20,7 @@ export default function Admin() {
         <div className="stat"><span>Monthly revenue</span><b>${s.monthly_revenue.toLocaleString()}</b><span>from active plans</span></div>
         <div className="stat"><span>Productions</span><b>{s.projects}</b><span>{s.rendering} scenes rendering</span></div>
         <div className="stat"><span>Credits spent</span><b>{s.credits_spent.toLocaleString()}</b><span>{s.credits_refunded.toLocaleString()} refunded</span></div>
+        <div className="stat"><span>Est. provider cost</span><b>${(s.provider_cost || 0).toLocaleString()}</b><span>all time, from credits used{s.pack_revenue ? ` · $${s.pack_revenue} in credit packs` : ''}</span></div>
         <div className="stat"><span>Failed renders</span><b style={{ color: s.failed ? 'var(--bad)' : undefined }}>{s.failed}</b></div>
         <div className="stat"><span>Waiting on you</span><b style={{ color: s.escalated ? 'var(--warn)' : undefined }}>{s.escalated}</b><span>escalated tickets</span></div>
       </div>
