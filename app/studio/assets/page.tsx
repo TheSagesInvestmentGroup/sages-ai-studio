@@ -22,6 +22,11 @@ export default function Assets() {
     if (!rights) { setErr({ message: 'Confirm that you own these files or have permission to use them.' }); return; }
     const personal = role === 'voice' || role === 'avatar';
     if (personal && !consent) { setErr({ message: 'Tick the consent box to use your own voice or likeness.' }); return; }
+    if (role === 'voice') for (const file of files) { // the voice service accepts 10 seconds to 5 minutes
+      const secs = await new Promise<number>(res => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(a.duration); a.onerror = () => res(NaN); a.src = URL.createObjectURL(file); setTimeout(() => res(NaN), 8000); });
+      if (secs > 300) { setErr({ message: `${file.name} is ${Math.floor(secs / 60)} min ${Math.round(secs % 60)} sec long. A voice sample can be at most 5 minutes. One to three minutes works best, so please trim it or record a shorter one.` }); return; }
+      if (secs < 15) { setErr({ message: `${file.name} is only ${Math.round(secs)} seconds long. Record at least one minute of clear speech.` }); return; }
+    }
     for (const file of files) {
       setBusy(`Uploading ${file.name}…`);
       try { await uploadAsset(file, { name: file.name, role, rights: true, consent: personal && consent }); } catch (e: any) { setErr(e); break; }
@@ -40,7 +45,7 @@ export default function Assets() {
         </div>
         <label className="check"><input id="asset-rights" type="checkbox" checked={rights} onChange={e => setRights(e.target.checked)} />I own these files or have permission to use them, including any people, voices, music and logos in them.</label>
         {(role === 'voice' || role === 'avatar') && <label className="check"><input id="asset-consent" type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} /><span>{role === 'voice' ? 'This is a recording of my own voice' : 'This is a photo of me'}, or I hold the written permission of the person in it. I agree to it being used to create a synthetic {role === 'voice' ? 'voice' : 'presenter'} for my productions. This consent is recorded, and I can delete the file at any time.</span></label>}
-        {role === 'voice' && <p className="small faint">Record one to two minutes of clear speech in a quiet room, with no music or other voices. MP3, WAV or M4A.</p>}
+        {role === 'voice' && <p className="small faint">Record one to three minutes of clear speech in a quiet room, with no music or other voices. Five minutes is the limit; longer recordings are not accepted. MP3, WAV or M4A.</p>}
         {role === 'avatar' && <p className="small faint">Use a clear, front-facing photo with good light and a plain background. PNG, JPG or WEBP.</p>}
         {picked.length > 0 && !busy && <p className="small muted">Ready to upload: {picked.map(f => f.name).join(', ')}</p>}
         <div className="row" style={{ gap: 10, alignItems: 'center' }}><button id="asset-upload" className="btn" onClick={send} disabled={!!busy || !picked.length}>{busy ? 'Uploading…' : picked.length > 1 ? `Upload ${picked.length} files` : 'Upload file'}</button><span className="small faint">{!picked.length ? 'Step 1: choose a file. Step 2: tick the box. Step 3: press Upload.' : !rights ? 'Tick the permission box, then press Upload.' : 'Press Upload to add it to your library.'}</span></div>
