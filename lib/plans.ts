@@ -42,6 +42,8 @@ export const PROVIDER_COST_PER_SECOND_USD = 0.07;
 export const COST = { videoPerSecond: 4, voicePerScene: 2 };
 export const sceneCost = (seconds: number, voice: boolean) => seconds * COST.videoPerSecond + (voice ? COST.voicePerScene : 0);
 
+// Narrator voices offered to members (Runway preset names).
+export const VOICES = ['Maya', 'Eleanor', 'Sandra', 'Claudia', 'Mark', 'James', 'Bernard', 'Clint', 'Frank', 'Vincent'];
 export const STYLES = ['Cinematic', 'Photorealistic', 'Documentary', 'Animation (3D)', 'Cartoon (2D)', 'Anime', 'Commercial', 'Musical', 'Theatrical', 'Sci-Fi', 'Fantasy', 'Corporate'];
 export const DURATIONS = [15, 30, 60, 90, 180];
 export const ASPECTS = [
